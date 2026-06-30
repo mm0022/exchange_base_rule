@@ -85,7 +85,7 @@ def run(config: Config, fetcher, now_ts: int) -> RunResult:
     snap_path = config.snapshot_dir / "okx.json"
     baseline = snapshot.load_snapshot(snap_path)
     is_baseline = baseline is None
-    baseline = baseline or {"docs": {}, "fees_text": "", "seen_ann_urls": []}
+    baseline = baseline or {"docs": {}, "fees_text": ""}
 
     # --- 文档 ---
     docs = _fetch_docs(config, fetcher)
@@ -117,10 +117,6 @@ def run(config: Config, fetcher, now_ts: int) -> RunResult:
             for d in docs
         },
         "fees_text": fees_text,
-        "seen_ann_urls": sorted(
-            set(baseline.get("seen_ann_urls", []))
-            | {a.url for lst in anns.values() for a in lst}
-        ),
     }
     snapshot.save_snapshot(snap_path, new_snap)
 

@@ -5,3 +5,4 @@ snapshots/
 reports/
 .pytest_cache/
 .superpowers/
+.DS_Store
