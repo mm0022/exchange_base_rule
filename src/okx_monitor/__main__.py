@@ -20,12 +20,17 @@ def main() -> int:
         print(f"运行失败: {e}", file=sys.stderr)
         return 1
 
-    md = render_markdown(result, cfg.window_days)
-    cfg.report_dir.mkdir(parents=True, exist_ok=True)
-    out = cfg.report_dir / f"okx-{now.strftime('%Y%m%d-%H%M')}.md"
-    out.write_text(md, encoding="utf-8")
-
-    print(f"\n报告已写入: {out}\n")
+    # 仅在有实质变更时写报告文件（首次基线也写，作为参照起点）。
+    # "变更" = 文档变化 或 费率变化；上下币公告是滚动窗口、每次都有，不计为变更。
+    has_changes = result.is_baseline or bool(result.doc_changes) or result.fee_changed
+    if has_changes:
+        md = render_markdown(result, cfg.window_days)
+        cfg.report_dir.mkdir(parents=True, exist_ok=True)
+        out = cfg.report_dir / f"okx-{now.strftime('%Y%m%d-%H%M')}.md"
+        out.write_text(md, encoding="utf-8")
+        print(f"\n报告已写入: {out}\n")
+    else:
+        print("\n本次无变化，未写报告\n")
     for line in summary_lines(result):
         print("  " + line)
     if cfg.slack_webhook_url:
