@@ -1,14 +1,14 @@
 """纯解析：输入原始响应文本/JSON，输出数据模型。无网络。"""
-import json
-import re
-
 from selectolax.parser import HTMLParser
 
 from okx_monitor.models import Announcement, DocMeta
 
 
 def parse_doc_list(api_json: dict) -> list[DocMeta]:
-    items = api_json["data"]["list"]
+    try:
+        items = api_json["data"]["list"]
+    except (KeyError, TypeError) as e:
+        raise ValueError("doc list: 响应缺少 data.list，接口可能已变更") from e
     docs: list[DocMeta] = []
     for it in items:
         docs.append(
@@ -71,12 +71,7 @@ def extract_fees_text(html: str) -> str:
 
 def resolve_section_id(category_json: dict, section_slug: str) -> str:
     """从分类接口响应里按 slug 找 section id。"""
-    blob = json.dumps(category_json, ensure_ascii=False)
-    # category 响应包含若干 section 对象，含 id 与 slug
-    for m in re.finditer(r'\{"id":"([^"]+)","slug":"([^"]+)"', blob):
-        if m.group(2) == section_slug:
-            return m.group(1)
-    # 退化：递归搜索
+    # 递归搜索
     def walk(o):
         if isinstance(o, dict):
             if o.get("slug") == section_slug and "id" in o:

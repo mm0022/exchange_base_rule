@@ -21,10 +21,10 @@ def test_parse_doc_list_returns_all_21_with_dates():
 
 
 def test_parse_announcements_classifies_type():
-    anns = parse.parse_announcements(_json("ann_new.json"), "announcements-new-listings")
+    anns = parse.parse_announcements(_json("ann_new.json"), "SENTINEL-not-a-real-type")
     assert anns, "应有上币公告"
     a = anns[0]
-    assert a.ann_type == "announcements-new-listings"
+    assert a.ann_type == "announcements-new-listings"  # 来自 item 的 annType 字段，而非传入参数
     assert a.ptime > 1_700_000_000
     assert a.url.startswith("http")
 
@@ -38,6 +38,7 @@ def test_extract_article_body_nonempty_chinese():
 def test_extract_fees_text_has_fee_terms():
     text = parse.extract_fees_text((FIX / "fees.html").read_text(encoding="utf-8"))
     assert "手续费" in text
+    assert "挂单" in text  # 额外验证提取到正确的 DOM 节点
 
 
 def test_resolve_section_id():
