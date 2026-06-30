@@ -2,7 +2,6 @@
 name = "okx-monitor"
 version = "0.1.0"
 description = "Monitor OKX (欧易) documentation, fee rules, and listing announcements for updates"
-readme = "README.md"
 authors = [
     { name = "majuan", email = "majuan@cyberx.com" }
 ]
