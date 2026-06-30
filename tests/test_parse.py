@@ -35,10 +35,20 @@ def test_extract_article_body_nonempty_chinese():
     assert "委托" in body
 
 
-def test_extract_fees_text_has_fee_terms():
-    text = parse.extract_fees_text((FIX / "fees.html").read_text(encoding="utf-8"))
-    assert "手续费" in text
-    assert "挂单" in text  # 额外验证提取到正确的 DOM 节点
+def test_extract_fees_text_is_stable_fee_data():
+    html = (FIX / "fees.html").read_text(encoding="utf-8")
+    text = parse.extract_fees_text(html)
+    # 结果必须是合法 JSON
+    obj = json.loads(text)
+    assert obj, "feeDataInfo 不应为空"
+    # 包含稳定的费率表结构标识
+    assert "feeTables" in text
+    assert "tableData" in text
+    assert "现货" in text
+    # 核心回归守卫：不含 traceId（volatile 字段已被剔除）
+    assert "traceId" not in text
+    # 确定性：同一 HTML 两次调用结果完全一致
+    assert parse.extract_fees_text(html) == text
 
 
 def test_resolve_section_id():

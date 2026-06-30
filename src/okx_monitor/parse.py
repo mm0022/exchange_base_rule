@@ -1,4 +1,6 @@
 """纯解析：输入原始响应文本/JSON，输出数据模型。无网络。"""
+import json
+
 from selectolax.parser import HTMLParser
 
 from okx_monitor.models import Announcement, DocMeta
@@ -58,15 +60,38 @@ def extract_article_body(html: str) -> str:
 
 
 def extract_fees_text(html: str) -> str:
-    """费率页无稳定 content 字段，取渲染后正文文本。"""
-    tree = HTMLParser(html)
-    body = tree.body
-    if body is None:
-        raise ValueError("fees: 无 body，页面可能已变更")
-    text = body.text(separator="\n", strip=True)
-    if "手续费" not in text:
-        raise ValueError("fees: 正文未含'手续费'，解析可能失效")
-    return text
+    """从费率页嵌入 JSON 中提取稳定的 feeDataInfo 对象并返回确定性序列化字符串。
+
+    页面 body 含有 traceId 等易变字段，直接取 body text 会导致每次请求产生虚假变化。
+    feeDataInfo 只含费率表数据，两次请求完全一致。
+    """
+    key = '"feeDataInfo":'
+    idx = html.find(key)
+    if idx == -1:
+        raise ValueError("fees: 未找到 feeDataInfo，页面结构可能已变更")
+
+    # 从 key 之后找第一个 '{'
+    start = html.find("{", idx + len(key))
+    if start == -1:
+        raise ValueError("fees: feeDataInfo 后未找到 '{'，页面结构可能已变更")
+
+    # 括号匹配提取完整 JSON 对象
+    depth = 0
+    end = start
+    for i in range(start, len(html)):
+        ch = html[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i
+                break
+    else:
+        raise ValueError("fees: feeDataInfo 括号不匹配，页面结构可能已变更")
+
+    obj = json.loads(html[start : end + 1])
+    return json.dumps(obj, ensure_ascii=False, sort_keys=True, indent=2)
 
 
 def resolve_section_id(category_json: dict, section_slug: str) -> str:
