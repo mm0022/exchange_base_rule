@@ -22,7 +22,13 @@ def _fetch_docs(cfg: Config, fetcher) -> list[DocMeta]:
     cat = fetcher.get_json(CATEGORY, {"slug": cfg.category_slug})
     sid = parse.resolve_section_id(cat, cfg.section_slug)
     data = fetcher.get_json(SEARCH_ARTICLES, {"sectionIds": sid, "page": 1, "size": 50})
-    return parse.parse_doc_list(data)
+    parsed_docs = parse.parse_doc_list(data)
+    total = (data.get("data") or {}).get("total")
+    if total is not None and int(total) > len(parsed_docs):
+        raise ValueError(
+            f"doc list 截断: 共 {total} 篇但只取到 {len(parsed_docs)} 篇，需要分页"
+        )
+    return parsed_docs
 
 
 def _fetch_body(cfg: Config, fetcher, slug: str) -> str:
@@ -62,7 +68,7 @@ def build_doc_changes(
                 DocChange(d.slug, d.title, d.url, _date(d.update_time), "new", "")
             )
             continue
-        if d.update_time != base["update_time"] or bodies[d.slug] != base.get("body", ""):
+        if d.update_time != base["update_time"]:
             diff = snapshot.unified_diff(base.get("body", ""), bodies[d.slug], d.title)
             changes.append(
                 DocChange(d.slug, d.title, d.url, _date(d.update_time), "updated", diff)

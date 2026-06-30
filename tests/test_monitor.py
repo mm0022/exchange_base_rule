@@ -39,7 +39,14 @@ def test_first_run_is_baseline(tmp_path):
     assert res.doc_changes == []
     assert res.fee_changed is False
     # 公告窗口内仍应列出（近3天）
-    assert isinstance(res.anns_new, list)
+    cfg_default = Config(snapshot_dir=tmp_path)
+    now_ts = 1_782_900_000
+    cutoff = now_ts - cfg_default.window_days * 86400
+    assert len(res.anns_new) > 0, "窗口内应有新上线公告"
+    for ann in res.anns_new:
+        assert ann.ptime >= cutoff, f"anns_new 含窗口外条目: {ann.ptime} < {cutoff}"
+    for ann in res.anns_del:
+        assert ann.ptime >= cutoff, f"anns_del 含窗口外条目: {ann.ptime} < {cutoff}"
     # 基线已落盘
     assert (tmp_path / "okx.json").exists()
 
