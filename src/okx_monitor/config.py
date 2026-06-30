@@ -27,3 +27,4 @@ class Config:
     timeout: float = 20.0
     retries: int = 3
     request_delay: float = 0.5  # 每次请求后小延时，避免限频
+    slack_webhook_url: str | None = None

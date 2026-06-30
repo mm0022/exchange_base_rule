@@ -41,3 +41,16 @@ class Fetcher:
 
     def get_text(self, url: str, params: dict | None = None) -> str:
         return self._get(url, params).text
+
+    def post_json(self, url: str, payload: dict) -> dict:
+        last: Exception | None = None
+        for attempt in range(self.cfg.retries):
+            try:
+                r = self._client.post(url, json=payload)
+                r.raise_for_status()
+                time.sleep(self.cfg.request_delay)
+                return {"status": r.status_code, "text": r.text}
+            except (httpx.HTTPError,) as e:
+                last = e
+                time.sleep(1.0 * (attempt + 1))
+        raise RuntimeError(f"POST 失败（重试{self.cfg.retries}次）: {url} -> {last}")
