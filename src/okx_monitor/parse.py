@@ -73,24 +73,10 @@ def extract_fees_text(html: str) -> str:
     # 从 key 之后找第一个 '{'
     start = html.find("{", idx + len(key))
     if start == -1:
-        raise ValueError("fees: feeDataInfo 后未找到 '{'，页面结构可能已变更")
+        raise ValueError("fees: feeDataInfo 后未找到 JSON 对象")
 
-    # 括号匹配提取完整 JSON 对象
-    depth = 0
-    end = start
-    for i in range(start, len(html)):
-        ch = html[i]
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                end = i
-                break
-    else:
-        raise ValueError("fees: feeDataInfo 括号不匹配，页面结构可能已变更")
-
-    obj = json.loads(html[start : end + 1])
+    # 用 JSON parser 提取完整对象，正确处理字符串值中的大括号
+    obj, _ = json.JSONDecoder().raw_decode(html, start)
     return json.dumps(obj, ensure_ascii=False, sort_keys=True, indent=2)
 
 
