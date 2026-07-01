@@ -27,10 +27,14 @@ class Fetcher:
         return merged
 
     def _get(self, url: str, params: dict | None, headers: dict | None) -> httpx.Response:
-        last: Exception | None = None
+        last = None
         for attempt in range(self.cfg.retries):
             try:
                 r = self._client.get(url, params=params, headers=self._merge_headers(headers))
+                if r.status_code == 429:
+                    last = httpx.HTTPStatusError("429 Too Many Requests", request=r.request, response=r)
+                    time.sleep(self.cfg.rate_limit_backoff * (attempt + 1))
+                    continue
                 r.raise_for_status()
                 time.sleep(self.cfg.request_delay)
                 return r
