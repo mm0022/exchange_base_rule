@@ -36,6 +36,14 @@ TARGETS = {
     "fees.html": "https://www.okx.com/zh-hans/fees",
 }
 
+OKX_EN_HEADERS = {**HEADERS, "Accept-Language": "en-US,en"}
+
+OKX_EN_TARGETS = {
+    "okx_docs_risk.json": "https://www.okx.com/priapi/v1/assistant/service-center/search/articles?sectionIds=7DvsH1pG7hjFKaGZ3ueWrZ&page=1&size=100",
+    "okx_docs_spot.json": "https://www.okx.com/priapi/v1/assistant/service-center/search/articles?sectionIds=3PfY4vSgD5mPa1Iww4b9fn&page=1&size=100",
+    "okx_docs_perp.json": "https://www.okx.com/priapi/v1/assistant/service-center/search/articles?sectionIds=4kHVrztBXA1RumrYkfdm8T&page=1&size=100",
+}
+
 BINANCE_HEADERS = {**HEADERS, "lang": "zh-CN"}
 BINANCE_TARGETS = {
     "binance_ann_new.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&catalogId=48&pageNo=1&pageSize=20",
@@ -49,6 +57,10 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     with httpx.Client(proxy=PROXY, headers=HEADERS, timeout=20) as c:
         for name, url in TARGETS.items():
+            _save(c, name, url)
+
+    with httpx.Client(proxy=PROXY, headers=OKX_EN_HEADERS, timeout=20) as c:
+        for name, url in OKX_EN_TARGETS.items():
             _save(c, name, url)
 
     with httpx.Client(proxy=PROXY, headers=BINANCE_HEADERS, timeout=20) as c:
