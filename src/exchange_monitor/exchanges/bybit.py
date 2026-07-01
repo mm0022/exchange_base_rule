@@ -3,6 +3,12 @@ import json
 import re
 from datetime import UTC, datetime
 
+from exchange_monitor.config import (
+    BYBIT_ANN_API,
+    BYBIT_HELP_BASE,
+    BYBIT_LOCALE,
+    BYBIT_TOPIC,
+)
 from exchange_monitor.models import Announcement, DocMeta
 
 _NEXT_DATA_RE = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.S)
@@ -70,5 +76,73 @@ def parse_article(article_html: str) -> tuple[str, int, str]:
     return body, upd, title
 
 
-# 供 Task 3 适配器使用
-_ = DocMeta
+_LIMIT = 20
+
+
+class BybitAdapter:
+    name = "Bybit"
+    snapshot_name = "bybit"
+
+    def __init__(self):
+        self._body_cache: dict[str, str] = {}
+
+    def _article_url(self, art_url: str) -> str:
+        return f"{BYBIT_HELP_BASE}/{BYBIT_LOCALE}/help-center/article/{art_url}"
+
+    def fetch_docs(self, fetcher, config) -> list[DocMeta]:
+        topic_html = fetcher.get_text(
+            f"{BYBIT_HELP_BASE}/{BYBIT_LOCALE}/help-center/topic-list/{BYBIT_TOPIC}"
+        )
+        data = extract_next_data(topic_html)["props"]["pageProps"]["data"]
+        articles = collect_articles(data)
+        self._body_cache = {}
+        docs: list[DocMeta] = []
+        for a in articles:
+            art_url = a["url"]
+            html = fetcher.get_text(self._article_url(art_url))
+            body, upd, title = parse_article(html)
+            self._body_cache[art_url] = body
+            docs.append(
+                DocMeta(
+                    slug=art_url,
+                    title=title or (a.get("title") or "").strip(),
+                    url=self._article_url(art_url),
+                    update_time=upd,
+                    publish_time=upd,
+                )
+            )
+        return docs
+
+    def fetch_doc_body(self, fetcher, config, doc: DocMeta) -> str:
+        if doc.slug in self._body_cache:
+            return self._body_cache[doc.slug]
+        return parse_article(fetcher.get_text(self._article_url(doc.slug)))[0]
+
+    def _collect_ann(self, fetcher, config, now_ts, ann_type, label):
+        cutoff = now_ts - config.window_days * 86400
+        out: list[Announcement] = []
+        page = 1
+        while True:
+            data = fetcher.get_json(
+                BYBIT_ANN_API,
+                {"locale": BYBIT_LOCALE, "type": ann_type, "page": page, "limit": _LIMIT},
+            )
+            anns = parse_announcements(data, label)
+            if not anns:
+                break
+            out.extend([a for a in anns if a.ptime >= cutoff])
+            total = announcements_total(data)
+            if anns[-1].ptime < cutoff or page * _LIMIT >= total:
+                break
+            page += 1
+        return out
+
+    def fetch_announcements(
+        self, fetcher, config, now_ts: int
+    ) -> tuple[list[Announcement], list[Announcement]]:
+        new = self._collect_ann(fetcher, config, now_ts, "new_crypto", "bybit-new-listings")
+        delist = self._collect_ann(fetcher, config, now_ts, "delistings", "bybit-delistings")
+        return new, delist
+
+    def fetch_fees(self, fetcher, config) -> str | None:
+        return None
