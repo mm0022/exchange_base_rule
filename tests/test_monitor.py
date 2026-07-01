@@ -36,6 +36,10 @@ def test_first_run_is_baseline(tmp_path):
     assert len(ex.doc_inventory) == 21
     assert ex.doc_changes == []
     assert ex.fee_changed is False and ex.fee_supported is True
+    # 基线时公告字段也应被填充为列表，且都在近 N 天窗口内
+    cutoff = 1_782_900_000 - cfg.window_days * 86400
+    assert isinstance(ex.anns_new, list) and isinstance(ex.anns_del, list)
+    assert all(a.ptime >= cutoff for a in ex.anns_new + ex.anns_del)
     assert (tmp_path / "okx.json").exists()
 
 
