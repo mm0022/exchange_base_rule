@@ -1,14 +1,20 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 BASE = "https://www.okx.com"
 SEARCH_ARTICLES = f"{BASE}/priapi/v1/assistant/service-center/search/articles"
 CATEGORY = f"{BASE}/priapi/v1/assistant/service-center/kb/unified/category"
+SECTION = f"{BASE}/priapi/v1/assistant/service-center/kb/unified/section"
 ANNOUNCEMENTS = f"{BASE}/api/v5/support/announcements"
 FEES_URL = f"{BASE}/en/fees"
 ARTICLE_URL = f"{BASE}/en/help"  # + /{slug}
 CATEGORY_SLUG = "product-documentation"
-SECTION_SLUG = "product-documentation-introduction-to-basic-trading-rules"
+SECTION_SLUGS = [
+    "product-documentation-introduction-to-basic-trading-rules",
+    "product-documentation-risk-management",
+    "product-documentation-spot-margin-trading",
+    "product-documentation-perpetual-contracts",
+]
 
 
 @dataclass
@@ -19,7 +25,7 @@ class Config:
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
     )
-    section_slug: str = SECTION_SLUG
+    section_slugs: list[str] = field(default_factory=lambda: SECTION_SLUGS)
     category_slug: str = CATEGORY_SLUG
     window_days: int = 3
     snapshot_dir: Path = Path("snapshots")

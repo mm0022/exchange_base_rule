@@ -3,9 +3,9 @@ from exchange_monitor.config import (
     ANNOUNCEMENTS,
     ARTICLE_URL,
     BASE,
-    CATEGORY,
     FEES_URL,
     SEARCH_ARTICLES,
+    SECTION,
 )
 from exchange_monitor.models import Announcement, DocMeta
 
@@ -17,16 +17,23 @@ class OkxAdapter:
     snapshot_name = "okx"
 
     def fetch_docs(self, fetcher, config) -> list[DocMeta]:
-        cat = fetcher.get_json(CATEGORY, {"slug": config.category_slug})
-        sid = parse.resolve_section_id(cat, config.section_slug)
-        data = fetcher.get_json(SEARCH_ARTICLES, {"sectionIds": sid, "page": 1, "size": 50})
-        docs = parse.parse_doc_list(data)
-        total = (data.get("data") or {}).get("total")
-        if total is not None and int(total) > len(docs):
-            raise ValueError(f"OKX doc list 截断: 共 {total} 篇但只取到 {len(docs)} 篇")
-        for d in docs:
-            if d.url.startswith("/"):
-                d.url = f"{BASE}{d.url}"
+        docs: list[DocMeta] = []
+        seen: set[str] = set()
+        for slug in config.section_slugs:
+            sec = fetcher.get_json(SECTION, {"slug": slug})
+            sid = parse.resolve_section_id(sec, slug)
+            data = fetcher.get_json(SEARCH_ARTICLES, {"sectionIds": sid, "page": 1, "size": 100})
+            section_docs = parse.parse_doc_list(data)
+            total = (data.get("data") or {}).get("total")
+            if total is not None and int(total) > len(section_docs):
+                raise ValueError(f"OKX section {slug} 截断: {len(section_docs)}/{total}")
+            for d in section_docs:
+                if d.slug in seen:
+                    continue
+                seen.add(d.slug)
+                if d.url.startswith("/"):
+                    d.url = f"{BASE}{d.url}"
+                docs.append(d)
         return docs
 
     def fetch_doc_body(self, fetcher, config, doc: DocMeta) -> str:
