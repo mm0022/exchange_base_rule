@@ -40,5 +40,5 @@ BINANCE_ANN_NEW_CATALOG = 48   # 新币上线
 BINANCE_ANN_DEL_CATALOG = 161  # 下架讯息
 BINANCE_FAQ_ROOT_CATALOG = 4     # 抓这棵树
 BINANCE_FAQ_BRANCH = 18          # 只监控「合约交易」分支
-BINANCE_BODY_DIFF_LEAVES = [214, 63]  # 统一账户 + U本位合约：抓 detail 做正文 diff；其余叶只对比 lastUpdateTime
+BINANCE_BODY_DIFF_LEAVES = frozenset({214, 63})  # 统一账户 + U本位合约：存正文做 diff；其余叶只对比 lastUpdateTime
 BINANCE_LANG = {"lang": "zh-CN"}

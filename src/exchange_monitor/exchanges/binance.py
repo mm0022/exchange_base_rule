@@ -173,7 +173,8 @@ class BinanceAdapter:
                 )
             )
         if skipped:
-            print(f"[Binance] 跳过 {len(skipped)}/{total} 篇(限频): {skipped[:5]}...", file=sys.stderr)
+            _more = "..." if len(skipped) > 5 else ""
+            print(f"[Binance] 跳过 {len(skipped)}/{total} 篇(限频): {skipped[:5]}{_more}", file=sys.stderr)
         return docs
 
     def fetch_doc_body(self, fetcher, config, doc: DocMeta) -> str:

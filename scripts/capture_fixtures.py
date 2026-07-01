@@ -26,8 +26,6 @@ BINANCE_TARGETS = {
     # catalogId=4 数字货币衍生品（大叶需翻页；pageNo 是全树全局分页，catalogId 在 p>=2 被忽略）
     "binance_faq_tree.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=2&catalogId=4&pageNo=1&pageSize=20",
     "binance_faq_tree_p2.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=2&catalogId=4&pageNo=2&pageSize=20",
-    # catalogId=3 现货杠杆（各叶均 ≤20，单页即全量）
-    "binance_faq_tree3.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=2&catalogId=3&pageNo=1&pageSize=20",
 }
 
 def main() -> None:
