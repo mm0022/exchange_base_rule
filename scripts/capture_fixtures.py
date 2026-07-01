@@ -87,10 +87,12 @@ def main() -> None:
             nd = _json.loads(_re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', th, _re.S).group(1))
             data = nd["props"]["pageProps"]["data"]
             def _first(o):
-                for a in (o.get("articles") or []): return a
+                for a in (o.get("articles") or []):
+                    return a
                 for ch in (o.get("children") or []):
                     r = _first(ch)
-                    if r: return r
+                    if r:
+                        return r
                 return None
             art_url = _first(data)["url"]
             _save(c, "bybit_article.html",
