@@ -4,13 +4,14 @@ from datetime import UTC, datetime
 
 from exchange_monitor.config import Config
 from exchange_monitor.exchanges.binance import BinanceAdapter
+from exchange_monitor.exchanges.bybit import BybitAdapter
 from exchange_monitor.exchanges.okx import OkxAdapter
 from exchange_monitor.fetcher import Fetcher
 from exchange_monitor.monitor import run
 from exchange_monitor.report import render_markdown, summary_lines
 from exchange_monitor.slack import send_report
 
-ADAPTERS = [OkxAdapter(), BinanceAdapter()]
+ADAPTERS = [OkxAdapter(), BinanceAdapter(), BybitAdapter()]
 
 
 def main() -> int:
