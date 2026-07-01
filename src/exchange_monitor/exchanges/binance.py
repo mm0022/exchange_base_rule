@@ -124,16 +124,20 @@ class BinanceAdapter:
                 branch_leaves = collect_leaves(branch)
                 branch_leaf_ids = {lf.get("catalogId") for lf in branch_leaves}
                 leaf_total = {lf.get("catalogId"): int(lf.get("total") or 0) for lf in branch_leaves}
-            # 从整棵树取所有叶，只保留属于分支 18 的叶
-            page_count = 0
+            # 从整棵树取所有叶，只保留属于分支 18 的叶。
+            # 终止用「全树本页文章数」而非「分支内文章数」：分页是全树全局的，
+            # 只要本页整棵树还有文章就继续翻，避免分支叶尚有后续页却因某页恰好只含
+            # 分支外文章而提前退出。
+            global_page_count = 0
             for lf in collect_leaves(tree):
                 lid = lf.get("catalogId")
+                arts = lf.get("articles") or []
+                global_page_count += len(arts)
                 if lid not in branch_leaf_ids:
                     continue
-                for a in (lf.get("articles") or []):
+                for a in arts:
                     by_code[a["code"]] = (a, lid)
-                    page_count += 1
-            if page_count == 0:
+            if global_page_count == 0:
                 break
             page += 1
             if page > _MAX_PAGES:
