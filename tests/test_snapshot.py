@@ -1,4 +1,4 @@
-from okx_monitor import snapshot
+from exchange_monitor import snapshot
 
 
 def test_load_missing_returns_none(tmp_path):

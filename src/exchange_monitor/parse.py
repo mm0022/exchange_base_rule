@@ -3,7 +3,7 @@ import json
 
 from selectolax.parser import HTMLParser
 
-from okx_monitor.models import Announcement, DocMeta
+from exchange_monitor.models import Announcement, DocMeta
 
 
 def parse_doc_list(api_json: dict) -> list[DocMeta]:

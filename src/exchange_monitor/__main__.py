@@ -2,11 +2,11 @@ import os
 import sys
 from datetime import UTC, datetime
 
-from okx_monitor.config import Config
-from okx_monitor.fetcher import Fetcher
-from okx_monitor.monitor import run
-from okx_monitor.report import render_markdown, summary_lines
-from okx_monitor.slack import send_report
+from exchange_monitor.config import Config
+from exchange_monitor.fetcher import Fetcher
+from exchange_monitor.monitor import run
+from exchange_monitor.report import render_markdown, summary_lines
+from exchange_monitor.slack import send_report
 
 
 def main() -> int:

@@ -1,6 +1,6 @@
 """测试 build_slack_message 纯函数（无网络）。"""
-from okx_monitor.models import Announcement, DocChange, DocMeta, RunResult
-from okx_monitor.slack import build_slack_message
+from exchange_monitor.models import Announcement, DocChange, DocMeta, RunResult
+from exchange_monitor.slack import build_slack_message
 
 
 def _doc_meta(slug: str = "test-doc") -> DocMeta:

@@ -1,8 +1,8 @@
 import json
 import pathlib
 
-from okx_monitor import monitor, snapshot
-from okx_monitor.config import Config
+from exchange_monitor import monitor, snapshot
+from exchange_monitor.config import Config
 
 FIX = pathlib.Path(__file__).parent / "fixtures"
 

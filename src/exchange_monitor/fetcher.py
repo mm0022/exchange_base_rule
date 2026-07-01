@@ -2,7 +2,7 @@ import time
 
 import httpx
 
-from okx_monitor.config import Config
+from exchange_monitor.config import Config
 
 
 class Fetcher:

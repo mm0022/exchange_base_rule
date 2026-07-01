@@ -1,7 +1,7 @@
 import json
 import pathlib
 
-from okx_monitor import parse
+from exchange_monitor import parse
 
 FIX = pathlib.Path(__file__).parent / "fixtures"
 

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
-from okx_monitor import parse, snapshot
-from okx_monitor.config import (
+from exchange_monitor import parse, snapshot
+from exchange_monitor.config import (
     ANNOUNCEMENTS,
     ARTICLE_URL,
     CATEGORY,
@@ -9,7 +9,7 @@ from okx_monitor.config import (
     SEARCH_ARTICLES,
     Config,
 )
-from okx_monitor.models import Announcement, DocChange, DocMeta, RunResult
+from exchange_monitor.models import Announcement, DocChange, DocMeta, RunResult
 
 ANN_TYPES = ["announcements-new-listings", "announcements-delistings"]
 

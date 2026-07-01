@@ -1,5 +1,5 @@
-from okx_monitor import report
-from okx_monitor.models import Announcement, DocChange, DocMeta, RunResult
+from exchange_monitor import report
+from exchange_monitor.models import Announcement, DocChange, DocMeta, RunResult
 
 
 def _baseline_result():

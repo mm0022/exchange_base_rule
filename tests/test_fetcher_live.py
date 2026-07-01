@@ -1,7 +1,7 @@
 import pytest
 
-from okx_monitor.config import Config, ANNOUNCEMENTS
-from okx_monitor.fetcher import Fetcher
+from exchange_monitor.config import Config, ANNOUNCEMENTS
+from exchange_monitor.fetcher import Fetcher
 
 
 @pytest.mark.live

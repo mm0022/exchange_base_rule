@@ -1,6 +1,6 @@
 """把监控结果组装为 Slack 消息并发送（Incoming Webhook）。"""
-from okx_monitor.models import RunResult
-from okx_monitor.report import summary_lines
+from exchange_monitor.models import RunResult
+from exchange_monitor.report import summary_lines
 
 _KIND_CN = {"new": "新增", "updated": "更新", "removed": "下架"}
 
