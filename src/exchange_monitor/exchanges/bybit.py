@@ -1,6 +1,7 @@
 """Bybit 数据源解析 + 适配器。公告用 V5 API；文档为 Next.js SSR(__NEXT_DATA__)。中文靠 zh-MY 路径。"""
 import json
 import re
+import sys
 from datetime import UTC, datetime
 
 from exchange_monitor.config import (
@@ -90,7 +91,6 @@ class BybitAdapter:
         return f"{BYBIT_HELP_BASE}/{BYBIT_LOCALE}/help-center/article/{art_url}"
 
     def fetch_docs(self, fetcher, config) -> list[DocMeta]:
-        import sys
         topic_html = fetcher.get_text(
             f"{BYBIT_HELP_BASE}/{BYBIT_LOCALE}/help-center/topic-list/{BYBIT_TOPIC}"
         )
@@ -111,7 +111,8 @@ class BybitAdapter:
             docs.append(DocMeta(slug=art_url, title=title or (a.get("title") or "").strip(),
                 url=self._article_url(art_url), update_time=upd, publish_time=upd))
         if skipped:
-            print(f"[Bybit] 跳过 {len(skipped)}/{total} 篇文档: {skipped[:5]}...", file=sys.stderr)
+            _more = "..." if len(skipped) > 5 else ""
+            print(f"[Bybit] 跳过 {len(skipped)}/{total} 篇文档: {skipped[:5]}{_more}", file=sys.stderr)
         return docs
 
     def fetch_doc_body(self, fetcher, config, doc: DocMeta) -> str:
