@@ -1,11 +1,13 @@
 """Binance 数据源解析 + 适配器。中文靠请求头 lang: zh-CN。"""
+import time
+
 from exchange_monitor.config import (
     BINANCE_ANN_DEL_CATALOG,
     BINANCE_ANN_NEW_CATALOG,
     BINANCE_BASE,
     BINANCE_CMS_DETAIL,
     BINANCE_CMS_LIST,
-    BINANCE_FAQ_CATALOG,
+    BINANCE_FAQ_CATALOGS,
     BINANCE_LANG,
 )
 from exchange_monitor.models import Announcement, DocMeta
@@ -80,39 +82,40 @@ class BinanceAdapter:
         self._body_cache: dict[str, str] = {}
 
     def fetch_docs(self, fetcher, config) -> list[DocMeta]:
-        # 1) 全树全局分页枚举文章（catalogId=4&pageNo=1,2,… 跨页按 code 累积）
+        # 1) 多 catalog 全树全局分页枚举文章（按 code 跨 catalog 累积，去重）
         by_code: dict[str, dict] = {}
         leaf_total: dict[int, int] = {}
-        page = 1
-        while True:
-            tree = fetcher.get_json(
-                BINANCE_CMS_LIST,
-                {"type": 2, "catalogId": BINANCE_FAQ_CATALOG, "pageNo": page, "pageSize": _PAGE_SIZE},
-                headers=BINANCE_LANG,
-            )
-            leaves = collect_leaves(tree)
-            page_count = 0
-            for leaf in leaves:
-                if page == 1 and leaf.get("catalogId") is not None:
-                    leaf_total[leaf["catalogId"]] = int(leaf.get("total") or 0)
-                for a in (leaf.get("articles") or []):
-                    by_code[a["code"]] = a
-                    page_count += 1
-            if page_count == 0:
-                break
-            page += 1
-            if page > _MAX_PAGES:
-                raise ValueError(f"Binance 文档分页超过 {_MAX_PAGES} 页，疑似异常")
+        for catalog in BINANCE_FAQ_CATALOGS:
+            page = 1
+            while True:
+                tree = fetcher.get_json(
+                    BINANCE_CMS_LIST,
+                    {"type": 2, "catalogId": catalog, "pageNo": page, "pageSize": _PAGE_SIZE},
+                    headers=BINANCE_LANG,
+                )
+                leaves = collect_leaves(tree)
+                page_count = 0
+                for leaf in leaves:
+                    if page == 1 and leaf.get("catalogId") is not None:
+                        leaf_total[leaf["catalogId"]] = int(leaf.get("total") or 0)
+                    for a in (leaf.get("articles") or []):
+                        by_code[a["code"]] = a
+                        page_count += 1
+                if page_count == 0:
+                    break
+                page += 1
+                if page > _MAX_PAGES:
+                    raise ValueError(f"Binance catalog {catalog} 文档分页超过 {_MAX_PAGES} 页，疑似异常")
         expected = sum(leaf_total.values())
         if expected and len(by_code) < expected:
             raise ValueError(f"Binance 文档截断: 取到 {len(by_code)}/{expected}")
-        # 2) 逐篇抓 detail（update_time + 正文），缓存正文
+        # 2) 逐篇抓 detail（update_time + 正文），缓存正文；节流用 config.binance_detail_delay
         self._body_cache = {}
         docs: list[DocMeta] = []
         for code, a in by_code.items():
-            det = fetcher.get_json(
-                BINANCE_CMS_DETAIL, {"articleCode": code}, headers=BINANCE_LANG
-            )
+            if config.binance_detail_delay:
+                time.sleep(config.binance_detail_delay)
+            det = fetcher.get_json(BINANCE_CMS_DETAIL, {"articleCode": code}, headers=BINANCE_LANG)
             body, upd, title = parse_detail(det)
             self._body_cache[code] = body
             docs.append(

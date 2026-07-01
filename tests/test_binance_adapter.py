@@ -28,16 +28,32 @@ class FakeFetcher:
                 if page == 1:
                     return _j("binance_ann_new.json" if params["catalogId"] == 48 else "binance_ann_del.json")
                 return {"code": "000000", "data": {"catalogs": []}}
-            # type == 2 文档：全树全局分页
-            if page == 1:
-                return _j("binance_faq_tree.json")
-            if page == 2:
-                return _j("binance_faq_tree_p2.json")
-            return {"code": "000000", "data": {"catalogs": []}}  # page>=3 无更多
+            # type == 2 文档：按 catalogId + pageNo 路由
+            cat = params.get("catalogId")
+            if cat == 4:
+                if page == 1:
+                    return _j("binance_faq_tree.json")
+                if page == 2:
+                    return _j("binance_faq_tree_p2.json")
+                return {"code": "000000", "data": {"catalogs": []}}  # page>=3 无更多
+            if cat == 3:
+                if page == 1:
+                    return _j("binance_faq_tree3.json")
+                return {"code": "000000", "data": {"catalogs": []}}  # page>=2 无更多
+            return {"code": "000000", "data": {"catalogs": []}}
         raise AssertionError(url)
 
     def get_text(self, url, params=None, headers=None):
         raise AssertionError("Binance 不用 get_text")
+
+
+def _expected_total():
+    import exchange_monitor.exchanges.binance as bn
+    tot = 0
+    for name in ("binance_faq_tree.json",):  # 只有 cat4（catalogId=4）
+        for lf in bn.collect_leaves(_j(name)):
+            tot += int(lf.get("total") or 0)
+    return tot  # ≈ 163（cat4 各叶 total 之和）
 
 
 def test_identity():
@@ -50,34 +66,30 @@ def test_fetch_fees_none():
 
 
 def test_fetch_docs_enumerates_full_tree_with_update_time():
-    docs = BinanceAdapter().fetch_docs(FakeFetcher(), Config())
-    # 全树文章数 = 各叶 total 之和（fixture 数据）
-    total_expected = sum((lf.get("total") or 0) for lf in __import__(
-        "exchange_monitor.exchanges.binance", fromlist=["collect_leaves"]
-    ).collect_leaves(_j("binance_faq_tree.json")))
-    assert len(docs) == total_expected
+    docs = BinanceAdapter().fetch_docs(FakeFetcher(), Config(binance_detail_delay=0))
+    assert len(docs) == _expected_total()
     assert all(d.url.startswith("https://www.binance.com/") for d in docs)
-    assert all(d.update_time > 1_700_000_000 for d in docs)  # 来自 detail 的 lastUpdateTime(秒)
+    assert all(d.update_time > 1_700_000_000 for d in docs)
 
 
 def test_fetch_doc_body_uses_cache():
     a = BinanceAdapter()
     fetcher = FakeFetcher()
-    docs = a.fetch_docs(fetcher, Config())
+    docs = a.fetch_docs(fetcher, Config(binance_detail_delay=0))
     calls_after_fetch_docs = fetcher.calls
-    body = a.fetch_doc_body(fetcher, Config(), docs[0])
+    body = a.fetch_doc_body(fetcher, Config(binance_detail_delay=0), docs[0])
     assert isinstance(body, str) and len(body) > 50
     assert fetcher.calls == calls_after_fetch_docs  # 命中缓存，未发额外请求
 
 
 def test_fetch_announcements_window_and_split():
     a = BinanceAdapter()
-    new, delist = a.fetch_announcements(FakeFetcher(), Config(), now_ts=99_999_999_999)
+    new, delist = a.fetch_announcements(FakeFetcher(), Config(binance_detail_delay=0), now_ts=99_999_999_999)
     # now_ts 极大 → cutoff 极大 → 窗口内为空（验证过滤生效，且不报错）
     assert new == [] and delist == []
     # now_ts 极小 → cutoff 极小 → 全部纳入
     a2 = BinanceAdapter()
-    new2, del2 = a2.fetch_announcements(FakeFetcher(), Config(), now_ts=0)
+    new2, del2 = a2.fetch_announcements(FakeFetcher(), Config(binance_detail_delay=0), now_ts=0)
     assert len(new2) > 0
     assert all(x.ann_type == "binance-new-listings" for x in new2)
     assert all(x.ann_type == "binance-delistings" for x in del2)
