@@ -24,8 +24,8 @@ BINANCE_TARGETS = {
     "binance_ann_new.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&catalogId=48&pageNo=1&pageSize=20",
     "binance_ann_del.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&catalogId=161&pageNo=1&pageSize=20",
     "binance_faq_tree.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=2&catalogId=4&pageNo=1&pageSize=20",
-    "binance_faq_leaf36_p2.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=2&catalogId=36&pageNo=2&pageSize=20",
-    "binance_faq_leaf37_p2.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=2&catalogId=37&pageNo=2&pageSize=20",
+    # pageNo 是全树全局分页（catalogId 被忽略）——p2 = 所有叶的第 2 页
+    "binance_faq_tree_p2.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=2&catalogId=4&pageNo=2&pageSize=20",
 }
 
 def main() -> None:
