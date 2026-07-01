@@ -90,27 +90,28 @@ class BybitAdapter:
         return f"{BYBIT_HELP_BASE}/{BYBIT_LOCALE}/help-center/article/{art_url}"
 
     def fetch_docs(self, fetcher, config) -> list[DocMeta]:
+        import sys
         topic_html = fetcher.get_text(
             f"{BYBIT_HELP_BASE}/{BYBIT_LOCALE}/help-center/topic-list/{BYBIT_TOPIC}"
         )
         data = extract_next_data(topic_html)["props"]["pageProps"]["data"]
         articles = collect_articles(data)
         self._body_cache = {}
-        docs: list[DocMeta] = []
+        docs, skipped = [], []
+        total = len(articles)
         for a in articles:
             art_url = a["url"]
-            html = fetcher.get_text(self._article_url(art_url))
-            body, upd, title = parse_article(html)
+            try:
+                html = fetcher.get_text(self._article_url(art_url))
+                body, upd, title = parse_article(html)
+            except Exception:  # noqa: BLE001 — 单篇失败(重定向/空/网络)跳过,不拖垮整家
+                skipped.append(art_url)
+                continue
             self._body_cache[art_url] = body
-            docs.append(
-                DocMeta(
-                    slug=art_url,
-                    title=title or (a.get("title") or "").strip(),
-                    url=self._article_url(art_url),
-                    update_time=upd,
-                    publish_time=upd,
-                )
-            )
+            docs.append(DocMeta(slug=art_url, title=title or (a.get("title") or "").strip(),
+                url=self._article_url(art_url), update_time=upd, publish_time=upd))
+        if skipped:
+            print(f"[Bybit] 跳过 {len(skipped)}/{total} 篇文档: {skipped[:5]}...", file=sys.stderr)
         return docs
 
     def fetch_doc_body(self, fetcher, config, doc: DocMeta) -> str:
