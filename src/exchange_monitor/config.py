@@ -28,3 +28,13 @@ class Config:
     retries: int = 3
     request_delay: float = 0.5  # 每次请求后小延时，避免限频
     slack_webhook_url: str | None = None
+
+
+# --- Binance ---
+BINANCE_BASE = "https://www.binance.com"
+BINANCE_CMS_LIST = f"{BINANCE_BASE}/bapi/composite/v1/public/cms/article/list/query"
+BINANCE_CMS_DETAIL = f"{BINANCE_BASE}/bapi/composite/v1/public/cms/article/detail/query"
+BINANCE_ANN_NEW_CATALOG = 48   # 新币上线
+BINANCE_ANN_DEL_CATALOG = 161  # 下架讯息
+BINANCE_FAQ_CATALOG = 4        # 数字货币衍生品（对应 support/faq/list/4）
+BINANCE_LANG = {"lang": "zh-CN"}

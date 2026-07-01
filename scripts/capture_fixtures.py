@@ -19,6 +19,15 @@ TARGETS = {
     "fees.html": "https://www.okx.com/zh-hans/fees",
 }
 
+BINANCE_HEADERS = {**HEADERS, "lang": "zh-CN"}
+BINANCE_TARGETS = {
+    "binance_ann_new.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&catalogId=48&pageNo=1&pageSize=20",
+    "binance_ann_del.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&catalogId=161&pageNo=1&pageSize=20",
+    "binance_faq_tree.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=2&catalogId=4&pageNo=1&pageSize=20",
+    "binance_faq_leaf36_p2.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=2&catalogId=36&pageNo=2&pageSize=20",
+    "binance_faq_leaf37_p2.json": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=2&catalogId=37&pageNo=2&pageSize=20",
+}
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     with httpx.Client(proxy=PROXY, headers=HEADERS, timeout=20) as c:
@@ -27,6 +36,29 @@ def main() -> None:
             r.raise_for_status()
             (OUT / name).write_text(r.text, encoding="utf-8")
             print(f"saved {name} ({len(r.text)} bytes)")
+
+    with httpx.Client(proxy=PROXY, headers=BINANCE_HEADERS, timeout=20) as c:
+        for name, url in BINANCE_TARGETS.items():
+            r = c.get(url); r.raise_for_status()
+            (OUT / name).write_text(r.text, encoding="utf-8")
+            print(f"saved {name} ({len(r.text)} bytes)")
+        # 取 faq_tree 里第一篇文章的 code，抓一篇 detail 作 fixture
+        import json as _json
+        tree = _json.loads((OUT / "binance_faq_tree.json").read_text(encoding="utf-8"))
+        def _first_code(o):
+            if isinstance(o, dict):
+                for a in (o.get("articles") or []):
+                    return a.get("code")
+                for s in (o.get("catalogs") or []):
+                    r = _first_code(s)
+                    if r:
+                        return r
+            return None
+        code = _first_code(tree["data"]["catalogs"][0])
+        r = c.get(f"https://www.binance.com/bapi/composite/v1/public/cms/article/detail/query?articleCode={code}")
+        r.raise_for_status()
+        (OUT / "binance_detail.json").write_text(r.text, encoding="utf-8")
+        print(f"saved binance_detail.json ({len(r.text)} bytes) for code {code}")
 
 if __name__ == "__main__":
     main()
