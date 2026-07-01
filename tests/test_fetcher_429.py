@@ -50,3 +50,4 @@ def test_429_exhausted_raises(monkeypatch):
     f._client = _Client([429, 429])
     with pytest.raises(RuntimeError):
         f.get_json("https://x/y")
+    assert f._client.calls == 2  # 两次尝试都 429，重试确实发生后才抛

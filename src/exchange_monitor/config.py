@@ -29,7 +29,7 @@ class Config:
     request_delay: float = 0.5  # 每次请求后小延时，避免限频
     slack_webhook_url: str | None = None
     binance_detail_delay: float = 1.0  # Binance detail 接口额外节流(限频较严)
-    rate_limit_backoff: float = 30.0  # HTTP 429 退避基数（秒），实际等待 = backoff*(attempt+1）
+    rate_limit_backoff: float = 30.0  # HTTP 429 退避基数（秒），实际等待 = backoff*(attempt+1)
 
 
 # --- Binance ---
