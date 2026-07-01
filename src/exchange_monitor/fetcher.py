@@ -12,7 +12,11 @@ class Fetcher:
             "User-Agent": config.user_agent,
             "Accept-Language": config.accept_language,
         }
-        self._client = httpx.Client(proxy=config.proxy, timeout=config.timeout)
+        # follow_redirects：交易所文章页常有 301/308（如 OKX /en/help→/help、
+        # Bybit 条款页→/legal）；跟随后取到最终页面，解析失败的仍由各适配器逐篇容错兜底。
+        self._client = httpx.Client(
+            proxy=config.proxy, timeout=config.timeout, follow_redirects=True
+        )
 
     def __enter__(self):
         return self
