@@ -42,3 +42,10 @@ BINANCE_FAQ_ROOT_CATALOG = 4     # 抓这棵树
 BINANCE_FAQ_BRANCH = 18          # 只监控「合约交易」分支
 BINANCE_BODY_DIFF_LEAVES = frozenset({214, 63})  # 统一账户 + U本位合约：存正文做 diff；其余叶只对比 lastUpdateTime
 BINANCE_LANG = {"lang": "zh-CN"}
+
+# --- Bybit ---
+BYBIT_ANN_API = "https://api.bybit.com/v5/announcements/index"
+BYBIT_LOCALE = "zh-MY"                     # 中文靠 URL 语言段；zh-CN 不被支持
+BYBIT_HELP_BASE = "https://www.bybit.com"  # + /{locale}/help-center/topic-list|article/{...}
+BYBIT_TOPIC = "unified-trading-account"    # 统一交易账户主题（含子主题，24 篇）
+BYBIT_ANN_TYPES = ["new_crypto", "delistings"]

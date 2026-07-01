@@ -60,5 +60,32 @@ def main() -> None:
         (OUT / "binance_detail.json").write_text(r.text, encoding="utf-8")
         print(f"saved binance_detail.json ({len(r.text)} bytes) for code {code}")
 
+    with httpx.Client(proxy=PROXY, headers=HEADERS, timeout=20) as c:
+        bybit = {
+            "bybit_ann_new.json": "https://api.bybit.com/v5/announcements/index?locale=zh-MY&type=new_crypto&page=1&limit=20",
+            "bybit_ann_del.json": "https://api.bybit.com/v5/announcements/index?locale=zh-MY&type=delistings&page=1&limit=20",
+            "bybit_topic.html": "https://www.bybit.com/zh-MY/help-center/topic-list/unified-trading-account",
+        }
+        for name, url in bybit.items():
+            r = c.get(url); r.raise_for_status()
+            (OUT / name).write_text(r.text, encoding="utf-8")
+            print(f"saved {name} ({len(r.text)} bytes)")
+        # 从 topic 页取第一篇文章 url，抓其 article 页作 fixture
+        import re as _re, json as _json
+        th = (OUT / "bybit_topic.html").read_text(encoding="utf-8")
+        nd = _json.loads(_re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', th, _re.S).group(1))
+        data = nd["props"]["pageProps"]["data"]
+        def _first(o):
+            for a in (o.get("articles") or []): return a
+            for ch in (o.get("children") or []):
+                r = _first(ch)
+                if r: return r
+            return None
+        art_url = _first(data)["url"]
+        r = c.get(f"https://www.bybit.com/zh-MY/help-center/article/{art_url}")
+        r.raise_for_status()
+        (OUT / "bybit_article.html").write_text(r.text, encoding="utf-8")
+        print(f"saved bybit_article.html ({len(r.text)} bytes) for {art_url}")
+
 if __name__ == "__main__":
     main()
