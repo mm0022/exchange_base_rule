@@ -58,4 +58,4 @@ def test_fetch_announcements_window_split():
     a = BybitAdapter()
     new, delist = a.fetch_announcements(FakeFetcher(), Config(), now_ts=0)
     assert new and all(x.ann_type == "bybit-new-listings" for x in new)
-    assert all(x.ann_type == "bybit-delistings" for x in delist)
+    assert delist and all(x.ann_type == "bybit-delistings" for x in delist)
