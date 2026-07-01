@@ -7,7 +7,7 @@ def test_merge_headers_overrides_defaults():
     merged = f._merge_headers({"lang": "zh-CN"})
     assert merged["lang"] == "zh-CN"
     assert merged["User-Agent"]  # 默认头仍在
-    assert merged["Accept-Language"] == "zh-CN,zh"
+    assert merged["Accept-Language"] == Config().accept_language
 
 
 def test_merge_headers_none_returns_defaults():

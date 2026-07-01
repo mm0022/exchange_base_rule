@@ -5,8 +5,8 @@ BASE = "https://www.okx.com"
 SEARCH_ARTICLES = f"{BASE}/priapi/v1/assistant/service-center/search/articles"
 CATEGORY = f"{BASE}/priapi/v1/assistant/service-center/kb/unified/category"
 ANNOUNCEMENTS = f"{BASE}/api/v5/support/announcements"
-FEES_URL = f"{BASE}/zh-hans/fees"
-ARTICLE_URL = f"{BASE}/zh-hans/help"  # + /{slug}
+FEES_URL = f"{BASE}/en/fees"
+ARTICLE_URL = f"{BASE}/en/help"  # + /{slug}
 CATEGORY_SLUG = "product-documentation"
 SECTION_SLUG = "product-documentation-introduction-to-basic-trading-rules"
 
@@ -14,7 +14,7 @@ SECTION_SLUG = "product-documentation-introduction-to-basic-trading-rules"
 @dataclass
 class Config:
     proxy: str = "http://127.0.0.1:7890"
-    accept_language: str = "zh-CN,zh"
+    accept_language: str = "en-US,en"
     user_agent: str = (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
@@ -41,10 +41,11 @@ BINANCE_ANN_DEL_CATALOG = 161  # 下架讯息
 BINANCE_FAQ_ROOT_CATALOG = 4     # 抓这棵树
 BINANCE_FAQ_BRANCH = 18          # 只监控「合约交易」分支
 BINANCE_BODY_DIFF_LEAVES = frozenset({214, 63})  # 统一账户 + U本位合约：存正文做 diff；其余叶只对比 lastUpdateTime
-BINANCE_LANG = {"lang": "zh-CN"}
+BINANCE_LANG = {"lang": "en"}
+BINANCE_WEB_LOCALE = "en"
 
 # --- Bybit ---
 BYBIT_ANN_API = "https://api.bybit.com/v5/announcements/index"
-BYBIT_LOCALE = "zh-MY"                     # 中文靠 URL 语言段；zh-CN 不被支持
+BYBIT_LOCALE = "en"                        # 英文版；英文内容更完整（25 vs 24 篇）
 BYBIT_HELP_BASE = "https://www.bybit.com"  # + /{locale}/help-center/topic-list|article/{...}
 BYBIT_TOPIC = "unified-trading-account"    # 统一交易账户主题（含子主题，24 篇）

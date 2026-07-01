@@ -12,6 +12,7 @@ from exchange_monitor.config import (
     BINANCE_FAQ_BRANCH,
     BINANCE_FAQ_ROOT_CATALOG,
     BINANCE_LANG,
+    BINANCE_WEB_LOCALE,
 )
 from exchange_monitor.models import Announcement, DocMeta
 
@@ -31,7 +32,7 @@ def parse_announcements(api_json: dict, ann_type: str) -> list[Announcement]:
         out.append(
             Announcement(
                 title=a["title"].strip(),
-                url=f"{BINANCE_BASE}/zh-CN/support/announcement/{a['code']}",
+                url=f"{BINANCE_BASE}/{BINANCE_WEB_LOCALE}/support/announcement/{a['code']}",
                 ptime=int(a["releaseDate"]) // 1000,
                 ann_type=ann_type,
             )
@@ -167,7 +168,7 @@ class BinanceAdapter:
                 DocMeta(
                     slug=code,
                     title=title or a.get("title", "").strip(),
-                    url=f"{BINANCE_BASE}/zh-CN/support/faq/{code}",
+                    url=f"{BINANCE_BASE}/{BINANCE_WEB_LOCALE}/support/faq/{code}",
                     update_time=upd,
                     publish_time=pub,
                 )
