@@ -151,6 +151,8 @@ class BinanceAdapter:
             if anns[-1].ptime < cutoff or page * _PAGE_SIZE >= announcements_total(data):
                 break
             page += 1
+            if page > _MAX_PAGES:
+                raise ValueError(f"Binance 公告分页超过 {_MAX_PAGES} 页，疑似异常: catalog={catalog}")
         return out
 
     def fetch_announcements(

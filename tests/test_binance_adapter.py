@@ -14,13 +14,20 @@ def _j(name):
 class FakeFetcher:
     """按 (type, catalogId, pageNo) 返回 fixture；detail 对任意 code 返回同一详情。"""
 
+    def __init__(self):
+        self.calls = 0
+
     def get_json(self, url, params=None, headers=None):
+        self.calls += 1
         if "article/detail/query" in url:
             return _j("binance_detail.json")
         if "article/list/query" in url:
             t, page = params["type"], params.get("pageNo", 1)
             if t == 1:
-                return _j("binance_ann_new.json" if params["catalogId"] == 48 else "binance_ann_del.json")
+                # type == 1 公告：仅第 1 页返回 fixture，>1 页返回空
+                if page == 1:
+                    return _j("binance_ann_new.json" if params["catalogId"] == 48 else "binance_ann_del.json")
+                return {"code": "000000", "data": {"catalogs": []}}
             # type == 2 文档：全树全局分页
             if page == 1:
                 return _j("binance_faq_tree.json")
@@ -55,10 +62,12 @@ def test_fetch_docs_enumerates_full_tree_with_update_time():
 
 def test_fetch_doc_body_uses_cache():
     a = BinanceAdapter()
-    docs = a.fetch_docs(FakeFetcher(), Config())
-    # fetch_docs 已缓存正文；fetch_doc_body 直接返回，不再请求
-    body = a.fetch_doc_body(FakeFetcher(), Config(), docs[0])
+    fetcher = FakeFetcher()
+    docs = a.fetch_docs(fetcher, Config())
+    calls_after_fetch_docs = fetcher.calls
+    body = a.fetch_doc_body(fetcher, Config(), docs[0])
     assert isinstance(body, str) and len(body) > 50
+    assert fetcher.calls == calls_after_fetch_docs  # 命中缓存，未发额外请求
 
 
 def test_fetch_announcements_window_and_split():
@@ -71,3 +80,4 @@ def test_fetch_announcements_window_and_split():
     new2, del2 = a2.fetch_announcements(FakeFetcher(), Config(), now_ts=0)
     assert len(new2) > 0
     assert all(x.ann_type == "binance-new-listings" for x in new2)
+    assert all(x.ann_type == "binance-delistings" for x in del2)
