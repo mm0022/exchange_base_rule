@@ -1,4 +1,4 @@
-"""Binance 数据源解析 + 适配器。中文靠请求头 lang: zh-CN。"""
+"""Binance 数据源解析 + 适配器。语言靠请求头 lang（当前 en）。"""
 import sys
 import time
 

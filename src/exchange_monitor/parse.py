@@ -80,8 +80,8 @@ def extract_fees_text(html: str) -> str:
     return json.dumps(obj, ensure_ascii=False, sort_keys=True, indent=2)
 
 
-def resolve_section_id(category_json: dict, section_slug: str) -> str:
-    """从分类接口响应里按 slug 找 section id。"""
+def resolve_section_id(response: dict, section_slug: str) -> str:
+    """从分类或 section 接口响应里按 slug 找 section id。"""
     # 递归搜索
     def walk(o):
         if isinstance(o, dict):
@@ -98,7 +98,7 @@ def resolve_section_id(category_json: dict, section_slug: str) -> str:
                     return r
         return None
 
-    sid = walk(category_json)
+    sid = walk(response)
     if not sid:
         raise ValueError(f"未找到 section '{section_slug}' 的 id，分类接口可能已变更")
     return sid

@@ -52,6 +52,6 @@ BINANCE_WEB_LOCALE = "en"
 
 # --- Bybit ---
 BYBIT_ANN_API = "https://api.bybit.com/v5/announcements/index"
-BYBIT_LOCALE = "en"                        # 英文版；英文内容更完整（25 vs 24 篇）
+BYBIT_LOCALE = "en"                        # 英文版；英文内容更完整（~25 篇）
 BYBIT_HELP_BASE = "https://www.bybit.com"  # + /{locale}/help-center/topic-list|article/{...}
-BYBIT_TOPIC = "unified-trading-account"    # 统一交易账户主题（含子主题，24 篇）
+BYBIT_TOPIC = "unified-trading-account"    # 统一交易账户主题（含子主题）

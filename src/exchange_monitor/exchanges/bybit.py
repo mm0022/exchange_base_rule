@@ -1,4 +1,4 @@
-"""Bybit 数据源解析 + 适配器。公告用 V5 API；文档为 Next.js SSR(__NEXT_DATA__)。中文靠 zh-MY 路径。"""
+"""Bybit 数据源解析 + 适配器。公告用 V5 API；文档为 Next.js SSR(__NEXT_DATA__)。语言靠 URL locale 段（当前 en）。"""
 import json
 import re
 import sys
@@ -66,7 +66,7 @@ def parse_last_updated(s: str) -> int:
 def parse_article(article_html: str) -> tuple[str, int, str]:
     art = extract_next_data(article_html).get("props", {}).get("pageProps", {}).get("article")
     if not art:
-        raise ValueError("Bybit article: article 为空（可能该语言无内容，需 zh-MY/zh-TW）")
+        raise ValueError("Bybit article: article 为空（可能该 locale 未提供内容）")
     tabs = art.get("tabs") or []
     if not tabs:
         raise ValueError("Bybit article: 无 tabs")
@@ -78,6 +78,7 @@ def parse_article(article_html: str) -> tuple[str, int, str]:
 
 
 _LIMIT = 20
+_MAX_PAGES = 100
 
 
 class BybitAdapter:
@@ -137,6 +138,8 @@ class BybitAdapter:
             if anns[-1].ptime < cutoff or page * _LIMIT >= total:
                 break
             page += 1
+            if page > _MAX_PAGES:
+                raise ValueError(f"Bybit 公告分页超过 {_MAX_PAGES} 页，疑似异常: type={ann_type}")
         return out
 
     def fetch_announcements(
