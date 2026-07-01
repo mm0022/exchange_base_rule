@@ -29,12 +29,19 @@ class DocChange:
 
 
 @dataclass
-class RunResult:
+class ExchangeResult:
+    name: str
     is_baseline: bool
-    generated_at: str
     doc_changes: list[DocChange] = field(default_factory=list)
     doc_inventory: list[DocMeta] = field(default_factory=list)
     fee_changed: bool = False
     fee_diff: str = ""
+    fee_supported: bool = False
     anns_new: list[Announcement] = field(default_factory=list)
     anns_del: list[Announcement] = field(default_factory=list)
+
+
+@dataclass
+class RunResult:
+    generated_at: str
+    exchanges: list["ExchangeResult"] = field(default_factory=list)
