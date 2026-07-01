@@ -1,13 +1,16 @@
 """Binance 数据源解析 + 适配器。中文靠请求头 lang: zh-CN。"""
+import sys
 import time
 
 from exchange_monitor.config import (
     BINANCE_ANN_DEL_CATALOG,
     BINANCE_ANN_NEW_CATALOG,
     BINANCE_BASE,
+    BINANCE_BODY_DIFF_LEAVES,
     BINANCE_CMS_DETAIL,
     BINANCE_CMS_LIST,
-    BINANCE_FAQ_CATALOGS,
+    BINANCE_FAQ_BRANCH,
+    BINANCE_FAQ_ROOT_CATALOG,
     BINANCE_LANG,
 )
 from exchange_monitor.models import Announcement, DocMeta
@@ -44,7 +47,7 @@ def announcements_total(api_json: dict) -> int:
 
 
 def collect_leaves(tree_json: dict) -> list[dict]:
-    """返回全部叶节点（无 subcatalogs 的 catalog dict）。"""
+    """返回全部叶节点（无 subcatalogs 的 catalog dict）。支持传入完整 tree JSON 或单个节点。"""
     leaves: list[dict] = []
 
     def walk(node: dict) -> None:
@@ -55,8 +58,12 @@ def collect_leaves(tree_json: dict) -> list[dict]:
         for s in subs:
             walk(s)
 
-    for c in _catalogs(tree_json):
-        walk(c)
+    # 支持传入完整 API 响应或单个节点
+    if "data" in tree_json or ("catalogId" not in tree_json and "catalogs" not in tree_json):
+        for c in _catalogs(tree_json):
+            walk(c)
+    else:
+        walk(tree_json)
     return leaves
 
 
@@ -68,6 +75,24 @@ def parse_detail(api_json: dict) -> tuple[str, int, str]:
     upd = int(data.get("lastUpdateTime") or data.get("publishDate") or 0) // 1000
     title = (data.get("title") or "").strip()
     return body, upd, title
+
+
+def _find_branch(tree_json: dict, branch_id: int) -> dict | None:
+    """在整棵树中找到 catalogId==branch_id 的节点。"""
+    def walk(o: dict) -> dict | None:
+        if o.get("catalogId") == branch_id:
+            return o
+        for s in (o.get("catalogs") or []):
+            r = walk(s)
+            if r:
+                return r
+        return None
+
+    for c in (_catalogs(tree_json)):
+        r = walk(c)
+        if r:
+            return r
+    return None
 
 
 _PAGE_SIZE = 20
@@ -82,51 +107,69 @@ class BinanceAdapter:
         self._body_cache: dict[str, str] = {}
 
     def fetch_docs(self, fetcher, config) -> list[DocMeta]:
-        # 1) 多 catalog 全树全局分页枚举文章（按 code 跨 catalog 累积，去重）
-        by_code: dict[str, dict] = {}
+        branch_leaf_ids: set[int] | None = None
         leaf_total: dict[int, int] = {}
-        for catalog in BINANCE_FAQ_CATALOGS:
-            page = 1
-            while True:
-                tree = fetcher.get_json(
-                    BINANCE_CMS_LIST,
-                    {"type": 2, "catalogId": catalog, "pageNo": page, "pageSize": _PAGE_SIZE},
-                    headers=BINANCE_LANG,
-                )
-                leaves = collect_leaves(tree)
-                page_count = 0
-                for leaf in leaves:
-                    if page == 1 and leaf.get("catalogId") is not None:
-                        leaf_total[leaf["catalogId"]] = int(leaf.get("total") or 0)
-                    for a in (leaf.get("articles") or []):
-                        by_code[a["code"]] = a
-                        page_count += 1
-                if page_count == 0:
-                    break
-                page += 1
-                if page > _MAX_PAGES:
-                    raise ValueError(f"Binance catalog {catalog} 文档分页超过 {_MAX_PAGES} 页，疑似异常")
+        by_code: dict[str, tuple[dict, int]] = {}  # code -> (article_dict, leaf_catalog_id)
+        page = 1
+        while True:
+            tree = fetcher.get_json(
+                BINANCE_CMS_LIST,
+                {"type": 2, "catalogId": BINANCE_FAQ_ROOT_CATALOG, "pageNo": page, "pageSize": _PAGE_SIZE},
+                headers=BINANCE_LANG,
+            )
+            if page == 1:
+                branch = _find_branch(tree, BINANCE_FAQ_BRANCH)
+                if branch is None:
+                    raise ValueError(f"Binance: 未找到合约交易分支({BINANCE_FAQ_BRANCH})")
+                branch_leaves = collect_leaves(branch)
+                branch_leaf_ids = {lf.get("catalogId") for lf in branch_leaves}
+                leaf_total = {lf.get("catalogId"): int(lf.get("total") or 0) for lf in branch_leaves}
+            # 从整棵树取所有叶，只保留属于分支 18 的叶
+            page_count = 0
+            for lf in collect_leaves(tree):
+                lid = lf.get("catalogId")
+                if lid not in branch_leaf_ids:
+                    continue
+                for a in (lf.get("articles") or []):
+                    by_code[a["code"]] = (a, lid)
+                    page_count += 1
+            if page_count == 0:
+                break
+            page += 1
+            if page > _MAX_PAGES:
+                raise ValueError(f"Binance 文档分页超过 {_MAX_PAGES} 页，疑似异常")
         expected = sum(leaf_total.values())
         if expected and len(by_code) < expected:
-            raise ValueError(f"Binance 文档截断: 取到 {len(by_code)}/{expected}")
-        # 2) 逐篇抓 detail（update_time + 正文），缓存正文；节流用 config.binance_detail_delay
+            raise ValueError(f"Binance 合约交易文档截断: 取到 {len(by_code)}/{expected}")
+        # 构造 docs：全部抓 detail 拿 lastUpdateTime；仅 BINANCE_BODY_DIFF_LEAVES 保留正文
         self._body_cache = {}
         docs: list[DocMeta] = []
-        for code, a in by_code.items():
+        skipped: list[str] = []
+        total = len(by_code)
+        for code, (a, lid) in by_code.items():
+            pub = int(a.get("releaseDate") or 0) // 1000
             if config.binance_detail_delay:
                 time.sleep(config.binance_detail_delay)
-            det = fetcher.get_json(BINANCE_CMS_DETAIL, {"articleCode": code}, headers=BINANCE_LANG)
-            body, upd, title = parse_detail(det)
-            self._body_cache[code] = body
+            try:
+                det = fetcher.get_json(BINANCE_CMS_DETAIL, {"articleCode": code}, headers=BINANCE_LANG)
+                body, upd, title = parse_detail(det)
+            except Exception:  # noqa: BLE001 — 单篇失败(限频等)跳过，不整体失败
+                skipped.append(code)
+                continue
+            # 仅指定两叶保留正文做 diff；其余叶只用 lastUpdateTime，正文留空
+            stored_body = body if lid in BINANCE_BODY_DIFF_LEAVES else ""
+            self._body_cache[code] = stored_body
             docs.append(
                 DocMeta(
                     slug=code,
                     title=title or a.get("title", "").strip(),
                     url=f"{BINANCE_BASE}/zh-CN/support/faq/{code}",
                     update_time=upd,
-                    publish_time=int(a.get("releaseDate") or 0) // 1000,
+                    publish_time=pub,
                 )
             )
+        if skipped:
+            print(f"[Binance] 跳过 {len(skipped)}/{total} 篇(限频): {skipped[:5]}...", file=sys.stderr)
         return docs
 
     def fetch_doc_body(self, fetcher, config, doc: DocMeta) -> str:

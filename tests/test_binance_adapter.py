@@ -1,8 +1,8 @@
 import json
 import pathlib
 
-from exchange_monitor.config import Config
-from exchange_monitor.exchanges.binance import BinanceAdapter
+from exchange_monitor.config import BINANCE_BODY_DIFF_LEAVES, Config
+from exchange_monitor.exchanges.binance import BinanceAdapter, _find_branch, collect_leaves
 
 FIX = pathlib.Path(__file__).parent / "fixtures"
 
@@ -12,34 +12,30 @@ def _j(name):
 
 
 class FakeFetcher:
-    """按 (type, catalogId, pageNo) 返回 fixture；detail 对任意 code 返回同一详情。"""
+    """按 (type, pageNo) 路由 fixture；detail 对任意 code 返回同一详情。"""
 
-    def __init__(self):
+    def __init__(self, fail_codes: set | None = None):
         self.calls = 0
+        self.fail_codes = fail_codes or set()
 
     def get_json(self, url, params=None, headers=None):
         self.calls += 1
         if "article/detail/query" in url:
+            code = (params or {}).get("articleCode", "")
+            if code in self.fail_codes:
+                raise RuntimeError(f"fake 429: {code}")
             return _j("binance_detail.json")
         if "article/list/query" in url:
             t, page = params["type"], params.get("pageNo", 1)
             if t == 1:
-                # type == 1 公告：仅第 1 页返回 fixture，>1 页返回空
                 if page == 1:
                     return _j("binance_ann_new.json" if params["catalogId"] == 48 else "binance_ann_del.json")
                 return {"code": "000000", "data": {"catalogs": []}}
-            # type == 2 文档：按 catalogId + pageNo 路由
-            cat = params.get("catalogId")
-            if cat == 4:
-                if page == 1:
-                    return _j("binance_faq_tree.json")
-                if page == 2:
-                    return _j("binance_faq_tree_p2.json")
-                return {"code": "000000", "data": {"catalogs": []}}  # page>=3 无更多
-            if cat == 3:
-                if page == 1:
-                    return _j("binance_faq_tree3.json")
-                return {"code": "000000", "data": {"catalogs": []}}  # page>=2 无更多
+            # type == 2 文档
+            if page == 1:
+                return _j("binance_faq_tree.json")
+            if page == 2:
+                return _j("binance_faq_tree_p2.json")
             return {"code": "000000", "data": {"catalogs": []}}
         raise AssertionError(url)
 
@@ -47,13 +43,30 @@ class FakeFetcher:
         raise AssertionError("Binance 不用 get_text")
 
 
-def _expected_total():
-    import exchange_monitor.exchanges.binance as bn
-    tot = 0
-    for name in ("binance_faq_tree.json",):  # 只有 cat4（catalogId=4）
-        for lf in bn.collect_leaves(_j(name)):
-            tot += int(lf.get("total") or 0)
-    return tot  # ≈ 163（cat4 各叶 total 之和）
+def _branch18_leaf_total() -> int:
+    """从 fixture 动态计算 branch-18 叶的 total 之和（不硬编码）。"""
+    tree = _j("binance_faq_tree.json")
+    branch = _find_branch(tree, 18)
+    assert branch is not None, "fixture 中找不到 branch 18"
+    return sum(int(lf.get("total") or 0) for lf in collect_leaves(branch))
+
+
+def _build_code_to_leaf(tree) -> dict[str, int]:
+    """从 tree fixture 建立 article code -> leaf catalogId 的映射（用于校验正文归属）。"""
+    branch = _find_branch(tree, 18)
+    assert branch is not None
+    branch_leaf_ids = {lf.get("catalogId") for lf in collect_leaves(branch)}
+    mapping: dict[str, int] = {}
+    # 从 p1 和 p2 两页收集
+    for name in ("binance_faq_tree.json", "binance_faq_tree_p2.json"):
+        t = _j(name)
+        for lf in collect_leaves(t):
+            lid = lf.get("catalogId")
+            if lid not in branch_leaf_ids:
+                continue
+            for a in (lf.get("articles") or []):
+                mapping[a["code"]] = lid
+    return mapping
 
 
 def test_identity():
@@ -65,19 +78,89 @@ def test_fetch_fees_none():
     assert BinanceAdapter().fetch_fees(FakeFetcher(), Config()) is None
 
 
-def test_fetch_docs_enumerates_full_tree_with_update_time():
+def test_fetch_docs_only_contract_branch():
+    """只抓 branch-18（合约交易）的文章；count == 从 fixture 动态算出的 145。"""
     docs = BinanceAdapter().fetch_docs(FakeFetcher(), Config(binance_detail_delay=0))
-    assert len(docs) == _expected_total()
+    expected = _branch18_leaf_total()
+    assert len(docs) == expected  # 从 fixture 算出，不硬编码（当前 = 145）
+    # URL 全是绝对路径
     assert all(d.url.startswith("https://www.binance.com/") for d in docs)
-    assert all(d.update_time > 1_700_000_000 for d in docs)
+    # 分支外的叶（期权 43、事件合约 305）不出现
+    tree = _j("binance_faq_tree.json")
+    branch = _find_branch(tree, 18)
+    branch_leaf_ids = {lf.get("catalogId") for lf in collect_leaves(branch)}
+    code_to_leaf = _build_code_to_leaf(tree)
+    slugs = {d.slug for d in docs}
+    for code, lid in code_to_leaf.items():
+        assert code in slugs, f"branch-18 文章 {code}(leaf {lid}) 未出现在结果里"
+    # 验证没有来自分支外的 slug（反向：fixture 里所有分支外 article code 不应出现）
+    for lf in collect_leaves(tree):
+        if lf.get("catalogId") not in branch_leaf_ids:
+            for a in (lf.get("articles") or []):
+                assert a["code"] not in slugs, f"分支外文章 {a['code']} 不应出现在结果里"
+
+
+def test_body_diff_leaves_have_body_others_empty():
+    """
+    214/63 叶的文档 fetch_doc_body 返回非空（正文来自 detail）；
+    其余叶的文档 fetch_doc_body 返回 ""；
+    所有文档的 update_time 均来自 detail 的 lastUpdateTime（>1.7e9）。
+    """
+    a = BinanceAdapter()
+    fetcher = FakeFetcher()
+    docs = a.fetch_docs(fetcher, Config(binance_detail_delay=0))
+
+    tree = _j("binance_faq_tree.json")
+    code_to_leaf = _build_code_to_leaf(tree)
+
+    body_diff_set = set(BINANCE_BODY_DIFF_LEAVES)
+
+    # 从 fixture 读出 lastUpdateTime 转秒（所有文档都应等于这个值，因为 FakeFetcher 返回同一 detail）
+    detail_upd = int(_j("binance_detail.json")["data"]["lastUpdateTime"]) // 1000
+
+    for d in docs:
+        assert d.update_time == detail_upd, f"{d.slug}: update_time 不等于 detail.lastUpdateTime"
+        lid = code_to_leaf.get(d.slug)
+        body = a.fetch_doc_body(fetcher, Config(binance_detail_delay=0), d)
+        if lid in body_diff_set:
+            assert body, f"leaf {lid} 文章 {d.slug} 应有正文，实际为空"
+        else:
+            assert body == "", f"leaf {lid} 文章 {d.slug} 正文应为空，实际有内容"
+
+
+def test_skips_on_detail_failure():
+    """单篇 detail 抓取失败时跳过，不整体失败；返回总数 = 145 - 失败数。"""
+    tree = _j("binance_faq_tree.json")
+    code_to_leaf = _build_code_to_leaf(tree)
+    all_codes = list(code_to_leaf.keys())
+    # 取前 3 个 code 作为失败目标
+    fail_codes = set(all_codes[:3])
+
+    a = BinanceAdapter()
+    fetcher = FakeFetcher(fail_codes=fail_codes)
+    docs = a.fetch_docs(fetcher, Config(binance_detail_delay=0))
+
+    expected = _branch18_leaf_total() - len(fail_codes)
+    assert len(docs) == expected
+    returned_slugs = {d.slug for d in docs}
+    for code in fail_codes:
+        assert code not in returned_slugs, f"失败的 code {code} 不应出现在结果里"
 
 
 def test_fetch_doc_body_uses_cache():
+    """fetch_doc_body 从缓存读（body-diff 叶非空，其余叶 ""），不发额外请求。"""
     a = BinanceAdapter()
     fetcher = FakeFetcher()
     docs = a.fetch_docs(fetcher, Config(binance_detail_delay=0))
     calls_after_fetch_docs = fetcher.calls
-    body = a.fetch_doc_body(fetcher, Config(binance_detail_delay=0), docs[0])
+
+    tree = _j("binance_faq_tree.json")
+    code_to_leaf = _build_code_to_leaf(tree)
+    body_diff_set = set(BINANCE_BODY_DIFF_LEAVES)
+
+    # 选一个 body-diff 叶的文档来验证非空
+    doc_with_body = next(d for d in docs if code_to_leaf.get(d.slug) in body_diff_set)
+    body = a.fetch_doc_body(fetcher, Config(binance_detail_delay=0), doc_with_body)
     assert isinstance(body, str) and len(body) > 50
     assert fetcher.calls == calls_after_fetch_docs  # 命中缓存，未发额外请求
 
@@ -85,7 +168,7 @@ def test_fetch_doc_body_uses_cache():
 def test_fetch_announcements_window_and_split():
     a = BinanceAdapter()
     new, delist = a.fetch_announcements(FakeFetcher(), Config(binance_detail_delay=0), now_ts=99_999_999_999)
-    # now_ts 极大 → cutoff 极大 → 窗口内为空（验证过滤生效，且不报错）
+    # now_ts 极大 → cutoff 极大 → 窗口内为空
     assert new == [] and delist == []
     # now_ts 极小 → cutoff 极小 → 全部纳入
     a2 = BinanceAdapter()
