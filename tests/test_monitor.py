@@ -56,3 +56,42 @@ def test_second_run_detects_doc_update(tmp_path):
     assert ex.is_baseline is False
     changed = next(c for c in ex.doc_changes if c.slug == any_slug)
     assert changed.kind == "updated" and changed.diff
+
+
+class _BoomAdapter:
+    """总是在 fetch_docs 时抛异常的假适配器，用于测试每交易所隔离。"""
+
+    name = "BoomExchange"
+    snapshot_name = "boom"
+
+    def fetch_docs(self, fetcher, config):
+        raise RuntimeError("boom: 模拟抓取失败")
+
+    def fetch_doc_body(self, fetcher, config, doc):
+        return ""
+
+    def fetch_fees(self, fetcher, config):
+        return None
+
+    def fetch_announcements(self, fetcher, config, now_ts):
+        return [], []
+
+
+def test_boom_adapter_isolation(tmp_path):
+    """一家交易所抛异常 → error 非空；其他交易所正常运行；失败交易所快照未写。"""
+    cfg = Config(snapshot_dir=tmp_path)
+    adapters = [OkxAdapter(), _BoomAdapter()]
+    res = monitor.run(cfg, FakeFetcher(), 1_782_900_000, adapters)
+
+    assert len(res.exchanges) == 2
+    okx_ex = next(e for e in res.exchanges if e.name == "OKX")
+    boom_ex = next(e for e in res.exchanges if e.name == "BoomExchange")
+
+    # OKX 正常完成（基线建立）
+    assert okx_ex.error == ""
+    assert okx_ex.is_baseline is True
+    assert (tmp_path / "okx.json").exists()
+
+    # BoomExchange 记录错误，快照未写，不抛出
+    assert "boom: 模拟抓取失败" in boom_ex.error
+    assert not (tmp_path / "boom.json").exists()

@@ -10,6 +10,10 @@ def _d(ts: int) -> str:
 
 
 def _render_exchange(lines: list[str], ex: ExchangeResult, window_days: int) -> None:
+    if ex.error:
+        lines.append(f"\n# {ex.name}")
+        lines.append(f"\n⚠️ 抓取失败：{ex.error}\n")
+        return
     tag = "（基线建立，无 diff）" if ex.is_baseline else ""
     lines.append(f"\n# {ex.name}{tag}")
 
@@ -66,7 +70,9 @@ def render_markdown(result: RunResult, window_days: int) -> str:
 def summary_lines(result: RunResult) -> list[str]:
     out: list[str] = []
     for ex in result.exchanges:
-        if ex.is_baseline:
+        if ex.error:
+            out.append(f"[{ex.name}] 抓取失败：{ex.error}")
+        elif ex.is_baseline:
             out.append(
                 f"[{ex.name}] 基线: 文档 {len(ex.doc_inventory)} 篇 / "
                 f"上币 {len(ex.anns_new)} 下币 {len(ex.anns_del)}"

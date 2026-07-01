@@ -32,3 +32,14 @@ def test_build_slack_message_no_changes_has_summary():
     r = _run([ExchangeResult(name="OKX", is_baseline=False, fee_supported=True)])
     text = slack.build_slack_message(r, 3)["text"]
     assert "OKX" in text and "• " in text
+
+
+def test_build_slack_message_error_in_summary():
+    """error 非空的交易所应在 summary 行中显示抓取失败信息。"""
+    r = _run([
+        ExchangeResult(name="OKX", is_baseline=False, fee_supported=True),
+        ExchangeResult(name="BoomExchange", is_baseline=False, error="连接超时"),
+    ])
+    text = slack.build_slack_message(r, 3)["text"]
+    # 摘要中出现错误信息
+    assert "BoomExchange" in text and "抓取失败" in text and "连接超时" in text

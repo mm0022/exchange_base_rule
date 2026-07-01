@@ -31,3 +31,27 @@ def test_markdown_shows_doc_diff_with_absolute_url():
 def test_summary_lines_per_exchange():
     lines = report.summary_lines(_baseline_run())
     assert lines and any("OKX" in ln for ln in lines)
+
+
+def test_render_exchange_error_section():
+    """error 非空时，_render_exchange 输出 ⚠️ 行后 return，不输出后续章节。"""
+    res = RunResult(
+        generated_at="2026-07-01 03:00 UTC",
+        exchanges=[ExchangeResult(name="BoomExchange", is_baseline=False, error="连接超时")],
+    )
+    md = report.render_markdown(res, 3)
+    assert "BoomExchange" in md
+    assert "⚠️" in md and "连接超时" in md
+    # 出错时不渲染常规章节
+    assert "交易规则" not in md
+    assert "费率规则" not in md
+
+
+def test_summary_lines_includes_error():
+    """summary_lines 对 error 非空的交易所显示抓取失败行。"""
+    res = RunResult(
+        generated_at="2026-07-01 03:00 UTC",
+        exchanges=[ExchangeResult(name="BoomExchange", is_baseline=False, error="DNS 解析失败")],
+    )
+    lines = report.summary_lines(res)
+    assert any("BoomExchange" in ln and "抓取失败" in ln and "DNS 解析失败" in ln for ln in lines)

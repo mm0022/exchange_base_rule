@@ -39,6 +39,7 @@ class ExchangeResult:
     fee_supported: bool = False
     anns_new: list[Announcement] = field(default_factory=list)
     anns_del: list[Announcement] = field(default_factory=list)
+    error: str = ""
 
 
 @dataclass
