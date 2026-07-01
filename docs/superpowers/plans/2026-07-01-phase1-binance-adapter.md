@@ -126,8 +126,9 @@ git commit -m "chore: add Binance config constants and capture fixtures"
   - `parse_announcements(api_json: dict, ann_type: str) -> list[Announcement]`
   - `announcements_total(api_json: dict) -> int`
   - `collect_leaves(tree_json: dict) -> list[dict]`（返回叶节点，每个是原始 catalog dict，含 `catalogId`/`total`/`articles`）
-  - `leaf_articles(list_json: dict, catalog_id: int) -> list[dict]`（从一次 list 响应里取指定叶的 `articles`）
   - `parse_detail(api_json: dict) -> tuple[str, int, str]`（返回 `(body, update_time_秒, title)`）
+
+> **分页机制（实测）**：Binance FAQ 的 `pageNo` 是**全树全局分页**——`catalogId=4&pageNo=N` 返回整棵树、每个叶子的第 N 页文章（catalogId 参数被忽略，`catalogId=36&pageNo=2` 与 `catalogId=4&pageNo=2` 完全相同）。因此枚举 = 用 `catalogId=4&pageNo=1,2,…` 逐页翻，跨页按 `code` 累积，直到某页 0 篇。不做按叶 catalogId 单独翻页。
 
 - [ ] **Step 1: 写失败测试 `tests/test_binance_parse.py`**
 
@@ -166,10 +167,11 @@ def test_collect_leaves_have_catalogid_and_total():
     assert any((lf.get("total") or 0) > 20 for lf in leaves)
 
 
-def test_leaf_articles_extracts_named_leaf():
-    arts = bn.leaf_articles(_j("binance_faq_leaf36_p2.json"), 36)
-    assert isinstance(arts, list) and arts
-    assert "code" in arts[0] and "title" in arts[0]
+def test_tree_p2_is_global_page():
+    # p2 是全树第2页：只含有第2页内容的叶（叶36=5, 叶37=18）
+    leaves = bn.collect_leaves(_j("binance_faq_tree_p2.json"))
+    counts = {lf.get("catalogId"): len(lf.get("articles") or []) for lf in leaves}
+    assert counts.get(36) == 5 and counts.get(37) == 18
 
 
 def test_parse_detail_returns_body_seconds_title():
@@ -239,24 +241,6 @@ def collect_leaves(tree_json: dict) -> list[dict]:
     return leaves
 
 
-def leaf_articles(list_json: dict, catalog_id: int) -> list[dict]:
-    """从一次 list 响应里递归找到指定 catalogId 叶的 articles。"""
-    def find(node: dict):
-        if node.get("catalogId") == catalog_id and node.get("articles") is not None:
-            return node.get("articles") or []
-        for s in (node.get("catalogs") or []):
-            r = find(s)
-            if r is not None:
-                return r
-        return None
-
-    for c in _catalogs(list_json):
-        r = find(c)
-        if r is not None:
-            return r
-    return []
-
-
 def parse_detail(api_json: dict) -> tuple[str, int, str]:
     data = api_json.get("data")
     if not data or "body" not in data:
@@ -319,18 +303,15 @@ class FakeFetcher:
         if "article/detail/query" in url:
             return _j("binance_detail.json")
         if "article/list/query" in url:
-            t, cid, page = params["type"], params["catalogId"], params.get("pageNo", 1)
+            t, page = params["type"], params.get("pageNo", 1)
             if t == 1:
-                return _j("binance_ann_new.json" if cid == 48 else "binance_ann_del.json")
-            # type == 2 文档
-            if cid == 4:
+                return _j("binance_ann_new.json" if params["catalogId"] == 48 else "binance_ann_del.json")
+            # type == 2 文档：全树全局分页
+            if page == 1:
                 return _j("binance_faq_tree.json")
-            if cid == 36 and page == 2:
-                return _j("binance_faq_leaf36_p2.json")
-            if cid == 37 and page == 2:
-                return _j("binance_faq_leaf37_p2.json")
-            # 其它叶的 page>=2：返回空 articles（这些叶 total<=20，不该被请求）
-            return {"code": "000000", "data": {"catalogs": []}}
+            if page == 2:
+                return _j("binance_faq_tree_p2.json")
+            return {"code": "000000", "data": {"catalogs": []}}  # page>=3 无更多
         raise AssertionError(url)
 
     def get_text(self, url, params=None, headers=None):
@@ -395,6 +376,7 @@ from exchange_monitor.config import (
 )
 
 _PAGE_SIZE = 20
+_MAX_PAGES = 50  # 分页安全上限（最大叶 total/20 远小于此）
 
 
 class BinanceAdapter:
@@ -405,33 +387,32 @@ class BinanceAdapter:
         self._body_cache: dict[str, str] = {}
 
     def fetch_docs(self, fetcher, config) -> list[DocMeta]:
-        tree = fetcher.get_json(
-            BINANCE_CMS_LIST,
-            {"type": 2, "catalogId": BINANCE_FAQ_CATALOG, "pageNo": 1, "pageSize": _PAGE_SIZE},
-            headers=BINANCE_LANG,
-        )
-        # 1) 枚举全部文章（逐叶分页取满 total）
+        # 1) 全树全局分页枚举文章（catalogId=4&pageNo=1,2,… 跨页按 code 累积）
         by_code: dict[str, dict] = {}
-        for leaf in collect_leaves(tree):
-            lid = leaf.get("catalogId")
-            total = int(leaf.get("total") or 0)
-            got = list(leaf.get("articles") or [])
-            page = 2
-            while len(got) < total:
-                data = fetcher.get_json(
-                    BINANCE_CMS_LIST,
-                    {"type": 2, "catalogId": lid, "pageNo": page, "pageSize": _PAGE_SIZE},
-                    headers=BINANCE_LANG,
-                )
-                more = leaf_articles(data, lid)
-                if not more:
-                    break
-                got.extend(more)
-                page += 1
-            if total and len(got) < total:
-                raise ValueError(f"Binance 叶 {lid} 文章截断: {len(got)}/{total}，需要分页修正")
-            for a in got:
-                by_code[a["code"]] = a
+        leaf_total: dict[int, int] = {}
+        page = 1
+        while True:
+            tree = fetcher.get_json(
+                BINANCE_CMS_LIST,
+                {"type": 2, "catalogId": BINANCE_FAQ_CATALOG, "pageNo": page, "pageSize": _PAGE_SIZE},
+                headers=BINANCE_LANG,
+            )
+            leaves = collect_leaves(tree)
+            page_count = 0
+            for leaf in leaves:
+                if page == 1 and leaf.get("catalogId") is not None:
+                    leaf_total[leaf["catalogId"]] = int(leaf.get("total") or 0)
+                for a in (leaf.get("articles") or []):
+                    by_code[a["code"]] = a
+                    page_count += 1
+            if page_count == 0:
+                break
+            page += 1
+            if page > _MAX_PAGES:
+                raise ValueError(f"Binance 文档分页超过 {_MAX_PAGES} 页，疑似异常")
+        expected = sum(leaf_total.values())
+        if expected and len(by_code) < expected:
+            raise ValueError(f"Binance 文档截断: 取到 {len(by_code)}/{expected}")
         # 2) 逐篇抓 detail（update_time + 正文），缓存正文
         self._body_cache = {}
         docs: list[DocMeta] = []
