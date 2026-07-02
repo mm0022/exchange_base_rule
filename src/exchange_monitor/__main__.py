@@ -49,6 +49,12 @@ def main() -> int:
             return 1
     else:
         print("  未配置 SLACK_WEBHOOK_URL，跳过 Slack 发送")
+
+    # 全部交易所都抓取失败（如代理未启动）视为整体失败：退出码 1（供定时任务重试判断）。
+    # 报告与 Slack 仍已发出，失败可见。
+    if result.exchanges and all(ex.error for ex in result.exchanges):
+        print("所有交易所均抓取失败", file=sys.stderr)
+        return 1
     return 0
 
 
