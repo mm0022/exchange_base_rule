@@ -1,7 +1,7 @@
 import json
 import pathlib
 
-from exchange_monitor.config import BINANCE_BODY_DIFF_LEAVES, Config
+from exchange_monitor.config import Config
 from exchange_monitor.exchanges.binance import BinanceAdapter, _find_branch, collect_leaves
 
 FIX = pathlib.Path(__file__).parent / "fixtures"
@@ -100,32 +100,22 @@ def test_fetch_docs_only_contract_branch():
                 assert a["code"] not in slugs, f"分支外文章 {a['code']} 不应出现在结果里"
 
 
-def test_body_diff_leaves_have_body_others_empty():
+def test_all_docs_have_text_body_and_update_time():
     """
-    214/63 叶的文档 fetch_doc_body 返回非空（正文来自 detail）；
-    其余叶的文档 fetch_doc_body 返回 ""；
-    所有文档的 update_time 均来自 detail 的 lastUpdateTime（>1.7e9）。
+    所有文档都存有纯文本正文（供逐字 diff），且 update_time 来自 detail 的 lastUpdateTime。
+    正文为提取后的纯文本（非 JSON 树）。
     """
     a = BinanceAdapter()
     fetcher = FakeFetcher()
     docs = a.fetch_docs(fetcher, Config(binance_detail_delay=0))
 
-    tree = _j("binance_faq_tree.json")
-    code_to_leaf = _build_code_to_leaf(tree)
-
-    body_diff_set = set(BINANCE_BODY_DIFF_LEAVES)
-
-    # 从 fixture 读出 lastUpdateTime 转秒（所有文档都应等于这个值，因为 FakeFetcher 返回同一 detail）
     detail_upd = int(_j("binance_detail.json")["data"]["lastUpdateTime"]) // 1000
 
     for d in docs:
         assert d.update_time == detail_upd, f"{d.slug}: update_time 不等于 detail.lastUpdateTime"
-        lid = code_to_leaf.get(d.slug)
         body = a.fetch_doc_body(fetcher, Config(binance_detail_delay=0), d)
-        if lid in body_diff_set:
-            assert body, f"leaf {lid} 文章 {d.slug} 应有正文，实际为空"
-        else:
-            assert body == "", f"leaf {lid} 文章 {d.slug} 正文应为空，实际有内容"
+        assert body, f"文章 {d.slug} 应有正文（全部文档均存正文），实际为空"
+        assert not body.lstrip().startswith("{"), f"{d.slug}: 正文应是纯文本，不应是 JSON 树"
 
 
 def test_skips_on_detail_failure():
@@ -154,13 +144,8 @@ def test_fetch_doc_body_uses_cache():
     docs = a.fetch_docs(fetcher, Config(binance_detail_delay=0))
     calls_after_fetch_docs = fetcher.calls
 
-    tree = _j("binance_faq_tree.json")
-    code_to_leaf = _build_code_to_leaf(tree)
-    body_diff_set = set(BINANCE_BODY_DIFF_LEAVES)
-
-    # 选一个 body-diff 叶的文档来验证非空
-    doc_with_body = next(d for d in docs if code_to_leaf.get(d.slug) in body_diff_set)
-    body = a.fetch_doc_body(fetcher, Config(binance_detail_delay=0), doc_with_body)
+    # 任意文档都有缓存正文（全部文档均存正文）
+    body = a.fetch_doc_body(fetcher, Config(binance_detail_delay=0), docs[0])
     assert isinstance(body, str) and len(body) > 50
     assert fetcher.calls == calls_after_fetch_docs  # 命中缓存，未发额外请求
 

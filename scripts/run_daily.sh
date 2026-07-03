@@ -7,7 +7,10 @@
 source "$HOME/.zshrc" 2>/dev/null   # 取 SLACK_WEBHOOK_URL（保持密钥在 ~/.zshrc，不入库）
 
 PROJ="$(cd "$(dirname "$0")/.." && pwd)"
-UV="$HOME/.local/bin/uv"
+# 直接用 venv 的 python，绕过 `uv run`：uv run 每次会校验/同步依赖（会访问网络），
+# 刚唤醒网络冷启动时曾卡住约 28 分钟。venv python 不碰网络、瞬时启动。
+# （依赖变动后需手动 `uv sync` 一次。）
+PY="$PROJ/.venv/bin/python"
 MARKER="$HOME/.exchange_monitor_last_success"
 LOG="$HOME/exchange_monitor_daily.log"
 TODAY="$(date +%F)"
@@ -21,7 +24,7 @@ if [ "$(cat "$MARKER" 2>/dev/null)" = "$TODAY" ]; then
 fi
 
 echo "$(date '+%F %T') === 开始运行 ===" >> "$LOG"
-"$UV" run python -m exchange_monitor >> "$LOG" 2>&1
+"$PY" -m exchange_monitor >> "$LOG" 2>&1
 code=$?
 if [ "$code" -eq 0 ]; then
   echo "$TODAY" > "$MARKER"

@@ -1,4 +1,6 @@
 """Binance 数据源解析 + 适配器。语言靠请求头 lang（当前 en）。"""
+import json
+import re
 import sys
 import time
 
@@ -6,7 +8,6 @@ from exchange_monitor.config import (
     BINANCE_ANN_DEL_CATALOG,
     BINANCE_ANN_NEW_CATALOG,
     BINANCE_BASE,
-    BINANCE_BODY_DIFF_LEAVES,
     BINANCE_CMS_DETAIL,
     BINANCE_CMS_LIST,
     BINANCE_FAQ_BRANCH,
@@ -15,6 +16,32 @@ from exchange_monitor.config import (
     BINANCE_WEB_LOCALE,
 )
 from exchange_monitor.models import Announcement, DocMeta
+
+_BLOCK_TAGS = {"p", "h1", "h2", "h3", "h4", "h5", "li", "tr", "div", "br"}
+
+
+def body_to_text(body_str: str) -> str:
+    """把 Binance detail 的 body（JSON 节点树）抽成可读纯文本，供逐字 diff。
+    收集 text 节点，块级元素后加换行；解析失败则回退原串。"""
+    try:
+        tree = json.loads(body_str)
+    except (ValueError, TypeError):
+        return body_str or ""
+    parts: list[str] = []
+
+    def walk(n):
+        if not isinstance(n, dict):
+            return
+        if n.get("node") == "text":
+            parts.append(n.get("text") or "")
+            return
+        for c in (n.get("child") or []):
+            walk(c)
+        if n.get("tag") in _BLOCK_TAGS:
+            parts.append("\n")
+
+    walk(tree)
+    return re.sub(r"\n{2,}", "\n", "".join(parts)).strip()
 
 
 def _catalogs(api_json: dict) -> list:
@@ -146,12 +173,12 @@ class BinanceAdapter:
         expected = sum(leaf_total.values())
         if expected and len(by_code) < expected:
             raise ValueError(f"Binance 合约交易文档截断: 取到 {len(by_code)}/{expected}")
-        # 构造 docs：全部抓 detail 拿 lastUpdateTime；仅 BINANCE_BODY_DIFF_LEAVES 保留正文
+        # 构造 docs：全部抓 detail 拿 lastUpdateTime + 正文（存为纯文本，供逐字 diff）
         self._body_cache = {}
         docs: list[DocMeta] = []
         skipped: list[str] = []
         total = len(by_code)
-        for code, (a, lid) in by_code.items():
+        for code, (a, _lid) in by_code.items():
             pub = int(a.get("releaseDate") or 0) // 1000
             if config.binance_detail_delay:
                 time.sleep(config.binance_detail_delay)
@@ -161,9 +188,7 @@ class BinanceAdapter:
             except Exception:  # noqa: BLE001 — 单篇失败(限频等)跳过，不整体失败
                 skipped.append(code)
                 continue
-            # 仅指定两叶保留正文做 diff；其余叶只用 lastUpdateTime，正文留空
-            stored_body = body if lid in BINANCE_BODY_DIFF_LEAVES else ""
-            self._body_cache[code] = stored_body
+            self._body_cache[code] = body_to_text(body)
             docs.append(
                 DocMeta(
                     slug=code,
@@ -184,7 +209,7 @@ class BinanceAdapter:
         det = fetcher.get_json(
             BINANCE_CMS_DETAIL, {"articleCode": doc.slug}, headers=BINANCE_LANG
         )
-        return parse_detail(det)[0]
+        return body_to_text(parse_detail(det)[0])
 
     def _collect_ann(self, fetcher, config, now_ts, catalog, ann_type):
         cutoff = now_ts - config.window_days * 86400
