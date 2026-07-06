@@ -24,7 +24,9 @@ if [ "$(cat "$MARKER" 2>/dev/null)" = "$TODAY" ]; then
 fi
 
 echo "$(date '+%F %T') === 开始运行 ===" >> "$LOG"
-"$PY" -m exchange_monitor >> "$LOG" 2>&1
+# caffeinate -i：运行期间阻止系统空闲睡眠——Binance 抓取约 10 分钟，
+# 若中途睡眠会挂起进程、导致运行跨天/marker 错乱/次日被跳过（曾发生）。
+caffeinate -i "$PY" -m exchange_monitor >> "$LOG" 2>&1
 code=$?
 if [ "$code" -eq 0 ]; then
   echo "$TODAY" > "$MARKER"
