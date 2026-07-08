@@ -1,9 +1,0 @@
-
-报告已写入: reports/exchanges-20260701-0739.md
-
-  [OKX] 文档变更 0 篇 / 费率无变化 / 上币 2 下币 0
-  [Binance] 文档变更 0 篇 / 费率未监控 / 上币 5 下币 3
-  [Bybit] 抓取失败：请求失败（重试3次）: https://www.bybit.com/zh-MY/help-center/article/Terms-and-Conditions-Unified-Trading-Account -> Redirect response '308 Permanent Redirect' for url 'https://www.bybit.com/zh-MY/help-center/article/Terms-and-Conditions-Unified-Trading-Account'
-Redirect location: '/zh-MY/legal/additional-terms-and-disclosures/Terms-and-Conditions-Unified-Trading-Account'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/308
-  已发送到 Slack
