@@ -20,7 +20,7 @@ def build_doc_changes(
         if base is None:
             changes.append(DocChange(d.slug, d.title, d.url, _date(d.update_time), "new", ""))
             continue
-        if d.update_time != base["update_time"]:
+        elif bodies[d.slug] != base.get("body", ""):
             diff = snapshot.unified_diff(base.get("body", ""), bodies[d.slug], d.title)
             changes.append(DocChange(d.slug, d.title, d.url, _date(d.update_time), "updated", diff))
     for slug, base in baseline_docs.items():
@@ -37,13 +37,8 @@ def _run_one(config: Config, fetcher, now_ts: int, adapter) -> ExchangeResult:
         baseline = baseline or {"docs": {}}
 
         docs = adapter.fetch_docs(fetcher, config)
-        bodies: dict[str, str] = {}
-        for d in docs:
-            base = baseline["docs"].get(d.slug)
-            if is_baseline or base is None or d.update_time != base["update_time"]:
-                bodies[d.slug] = adapter.fetch_doc_body(fetcher, config, d)
-            else:
-                bodies[d.slug] = base.get("body", "")
+        # 变更检测只看正文内容（交易所常静默改正文而不更新时间戳），故每次都抓正文。
+        bodies: dict[str, str] = {d.slug: adapter.fetch_doc_body(fetcher, config, d) for d in docs}
         doc_changes = [] if is_baseline else build_doc_changes(docs, bodies, baseline["docs"])
 
         fees_text = adapter.fetch_fees(fetcher, config)
