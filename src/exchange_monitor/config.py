@@ -30,7 +30,7 @@ class Config:
     window_days: int = 3
     snapshot_dir: Path = Path("snapshots")
     report_dir: Path = Path("reports")
-    log_dir: Path = Path("logs")
+    log_dir: Path = Path("reports")
     timeout: float = 20.0
     retries: int = 3
     request_delay: float = 0.5  # 每次请求后小延时，避免限频
