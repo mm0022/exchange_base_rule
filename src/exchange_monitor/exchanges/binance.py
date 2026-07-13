@@ -1,7 +1,7 @@
 """Binance 数据源解析 + 适配器。语言靠请求头 lang（当前 en）。"""
 import json
+import logging
 import re
-import sys
 import time
 
 from exchange_monitor.config import (
@@ -16,6 +16,8 @@ from exchange_monitor.config import (
     BINANCE_WEB_LOCALE,
 )
 from exchange_monitor.models import Announcement, DocMeta
+
+log = logging.getLogger(__name__)
 
 _BLOCK_TAGS = {"p", "h1", "h2", "h3", "h4", "h5", "li", "tr", "div", "br"}
 
@@ -187,7 +189,9 @@ class BinanceAdapter:
                 body, upd, title = parse_detail(det)
             except Exception:  # noqa: BLE001 — 单篇失败(限频等)跳过，不整体失败
                 skipped.append(code)
+                log.debug("Binance detail 跳过: %s", code)
                 continue
+            log.debug("Binance detail: %s (%s)", code, (title or "")[:40])
             self._body_cache[code] = body_to_text(body)
             docs.append(
                 DocMeta(
@@ -200,7 +204,7 @@ class BinanceAdapter:
             )
         if skipped:
             _more = "..." if len(skipped) > 5 else ""
-            print(f"[Binance] 跳过 {len(skipped)}/{total} 篇(限频): {skipped[:5]}{_more}", file=sys.stderr)
+            log.warning("[Binance] 跳过 %d/%d 篇(限频): %s%s", len(skipped), total, skipped[:5], _more)
         return docs
 
     def fetch_doc_body(self, fetcher, config, doc: DocMeta) -> str:

@@ -1,8 +1,12 @@
+import logging
+import time
 from datetime import UTC, datetime
 
 from exchange_monitor import snapshot
 from exchange_monitor.config import Config
 from exchange_monitor.models import DocChange, DocMeta, ExchangeResult, RunResult
+
+log = logging.getLogger(__name__)
 
 
 def _date(ts: int) -> str:
@@ -30,13 +34,16 @@ def build_doc_changes(
 
 
 def _run_one(config: Config, fetcher, now_ts: int, adapter) -> ExchangeResult:
+    t0 = time.monotonic()
     try:
+        log.info("[%s] 开始抓取", adapter.name)
         snap_path = config.snapshot_dir / f"{adapter.snapshot_name}.json"
         baseline = snapshot.load_snapshot(snap_path)
         is_baseline = baseline is None
         baseline = baseline or {"docs": {}}
 
         docs = adapter.fetch_docs(fetcher, config)
+        log.info("[%s] 文档 %d 篇%s", adapter.name, len(docs), "（首次基线）" if is_baseline else "")
         # 变更检测只看正文内容（交易所常静默改正文而不更新时间戳），故每次都抓正文。
         bodies: dict[str, str] = {d.slug: adapter.fetch_doc_body(fetcher, config, d) for d in docs}
         doc_changes = [] if is_baseline else build_doc_changes(docs, bodies, baseline["docs"])
@@ -49,6 +56,12 @@ def _run_one(config: Config, fetcher, now_ts: int, adapter) -> ExchangeResult:
         fee_changed = bool(fee_diff)
 
         anns_new, anns_del = adapter.fetch_announcements(fetcher, config, now_ts)
+        log.info(
+            "[%s] 完成：文档变更 %d 篇 / 费率%s / 公告 上%d 下%d / 耗时 %.1fs",
+            adapter.name, len(doc_changes),
+            ("变化" if fee_changed else "无变化") if fee_supported else "未监控",
+            len(anns_new), len(anns_del), time.monotonic() - t0,
+        )
 
         new_snap: dict = {
             "docs": {
@@ -72,6 +85,7 @@ def _run_one(config: Config, fetcher, now_ts: int, adapter) -> ExchangeResult:
             anns_del=anns_del,
         )
     except Exception as e:  # noqa: BLE001 — 单交易所失败不拖垮其他交易所
+        log.exception("[%s] 抓取失败（耗时 %.1fs）", adapter.name, time.monotonic() - t0)
         return ExchangeResult(name=adapter.name, is_baseline=False, error=str(e))
 
 

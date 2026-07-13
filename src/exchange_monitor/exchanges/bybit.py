@@ -1,7 +1,7 @@
 """Bybit 数据源解析 + 适配器。公告用 V5 API；文档为 Next.js SSR(__NEXT_DATA__)。语言靠 URL locale 段（当前 en）。"""
 import json
+import logging
 import re
-import sys
 from datetime import UTC, datetime
 
 from exchange_monitor.config import (
@@ -11,6 +11,8 @@ from exchange_monitor.config import (
     BYBIT_TOPIC,
 )
 from exchange_monitor.models import Announcement, DocMeta
+
+log = logging.getLogger(__name__)
 
 _NEXT_DATA_RE = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.S)
 
@@ -107,13 +109,15 @@ class BybitAdapter:
                 body, upd, title = parse_article(html)
             except Exception:  # noqa: BLE001 — 单篇失败(重定向/空/网络)跳过,不拖垮整家
                 skipped.append(art_url)
+                log.debug("Bybit article 跳过: %s", art_url)
                 continue
+            log.debug("Bybit article: %s", art_url)
             self._body_cache[art_url] = body
             docs.append(DocMeta(slug=art_url, title=title or (a.get("title") or "").strip(),
                 url=self._article_url(art_url), update_time=upd, publish_time=upd))
         if skipped:
             _more = "..." if len(skipped) > 5 else ""
-            print(f"[Bybit] 跳过 {len(skipped)}/{total} 篇文档: {skipped[:5]}{_more}", file=sys.stderr)
+            log.warning("[Bybit] 跳过 %d/%d 篇文档: %s%s", len(skipped), total, skipped[:5], _more)
         return docs
 
     def fetch_doc_body(self, fetcher, config, doc: DocMeta) -> str:
