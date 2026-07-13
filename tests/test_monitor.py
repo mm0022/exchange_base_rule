@@ -61,7 +61,7 @@ def test_second_run_detects_doc_update(tmp_path):
 
 
 class _BoomAdapter:
-    """总是在 fetch_docs 时抛异常的假适配器，用于测试每交易所隔离。"""
+    """在 fetch_docs 时抛异常的假适配器：单块（文档）失败 → warning，不影响其它交易所。"""
 
     name = "BoomExchange"
     snapshot_name = "boom"
@@ -80,7 +80,7 @@ class _BoomAdapter:
 
 
 def test_boom_adapter_isolation(tmp_path):
-    """一家交易所抛异常 → error 非空；其他交易所正常运行；失败交易所快照未写。"""
+    """一家交易所文档块抛异常 → warning（非 error）；其他交易所正常；首次+文档失败不建空基线。"""
     cfg = Config(snapshot_dir=tmp_path)
     adapters = [OkxAdapter(), _BoomAdapter()]
     res = monitor.run(cfg, FakeFetcher(), 1_782_900_000, adapters)
@@ -94,6 +94,64 @@ def test_boom_adapter_isolation(tmp_path):
     assert okx_ex.is_baseline is True
     assert (tmp_path / "okx.json").exists()
 
-    # BoomExchange 记录错误，快照未写，不抛出
-    assert "boom: 模拟抓取失败" in boom_ex.error
+    # BoomExchange 仅文档块失败：记 warning、error 为空、快照未写、不抛出
+    assert boom_ex.error == ""
+    assert any("文档抓取失败" in w and "boom: 模拟抓取失败" in w for w in boom_ex.warnings)
     assert not (tmp_path / "boom.json").exists()
+
+
+class _FeeBrokenFetcher(FakeFetcher):
+    """费率页始终返回不含 feeDataInfo 的精简版，模拟 OKX 服务端偶发精简变体。"""
+
+    def get_text(self, url, params=None, headers=None):
+        if "/fees" in url:
+            return "<html><body>no fee data</body></html>"
+        return super().get_text(url, params, headers)
+
+
+def test_fees_failure_isolated(tmp_path):
+    """费率块失败（重试仍精简版）→ 记 warning；文档/公告照常；快照仍落盘（不含费率）。"""
+    cfg = Config(snapshot_dir=tmp_path)
+    res = monitor.run(cfg, _FeeBrokenFetcher(), 1_782_900_000, [OkxAdapter()])
+    ex = res.exchanges[0]
+
+    assert ex.error == ""
+    assert any("费率抓取失败" in w for w in ex.warnings)
+    assert ex.fee_supported is False
+    # 文档与公告不受费率失败影响
+    assert len(ex.doc_inventory) == _expected_total()
+    assert isinstance(ex.anns_new, list) and isinstance(ex.anns_del, list)
+    # 快照落盘：有文档、无费率键
+    assert (tmp_path / "okx.json").exists()
+    snap = snapshot.load_snapshot(tmp_path / "okx.json")
+    assert snap["docs"] and "fees_text" not in snap
+
+
+class _AllBoomAdapter:
+    """三块全部抛异常的假适配器：整体失败 → error 非空（供全交易所失败退出码判断）。"""
+
+    name = "AllBoom"
+    snapshot_name = "allboom"
+
+    def fetch_docs(self, fetcher, config):
+        raise RuntimeError("docs boom")
+
+    def fetch_doc_body(self, fetcher, config, doc):
+        return ""
+
+    def fetch_fees(self, fetcher, config):
+        raise RuntimeError("fees boom")
+
+    def fetch_announcements(self, fetcher, config, now_ts):
+        raise RuntimeError("anns boom")
+
+
+def test_all_blocks_fail_sets_error(tmp_path):
+    """三块全失败 → error 汇总三条；快照不写（首次+文档失败不建空基线）。"""
+    cfg = Config(snapshot_dir=tmp_path)
+    res = monitor.run(cfg, FakeFetcher(), 1_782_900_000, [_AllBoomAdapter()])
+    ex = res.exchanges[0]
+
+    assert ex.error
+    assert "docs boom" in ex.error and "fees boom" in ex.error and "anns boom" in ex.error
+    assert not (tmp_path / "allboom.json").exists()

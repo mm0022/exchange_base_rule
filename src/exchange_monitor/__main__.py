@@ -32,7 +32,8 @@ def main() -> int:
         return 1
 
     has_changes = any(
-        ex.is_baseline or ex.doc_changes or ex.fee_changed or ex.error for ex in result.exchanges
+        ex.is_baseline or ex.doc_changes or ex.fee_changed or ex.error or ex.warnings
+        for ex in result.exchanges
     )
     if has_changes:
         md = render_markdown(result, cfg.window_days)

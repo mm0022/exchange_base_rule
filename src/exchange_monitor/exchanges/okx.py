@@ -1,3 +1,5 @@
+import logging
+
 from exchange_monitor import parse
 from exchange_monitor.config import (
     ANNOUNCEMENTS,
@@ -9,7 +11,12 @@ from exchange_monitor.config import (
 )
 from exchange_monitor.models import Announcement, DocMeta
 
+log = logging.getLogger(__name__)
+
 _ANN_TYPES = ["announcements-new-listings", "announcements-delistings"]
+# OKX 偶发返回不含 feeDataInfo 的精简版费率页（服务端非确定性，同机连抓都会 True/True/False
+# 抖动）。抓到精简版就重抓换个服务端变体，直到拿到内联费率数据的完整版。
+_FEES_RETRIES = 6
 
 
 class OkxAdapter:
@@ -59,4 +66,14 @@ class OkxAdapter:
         return out["announcements-new-listings"], out["announcements-delistings"]
 
     def fetch_fees(self, fetcher, config) -> str | None:
-        return parse.extract_fees_text(fetcher.get_text(FEES_URL))
+        last: ValueError | None = None
+        for attempt in range(_FEES_RETRIES):
+            try:
+                return parse.extract_fees_text(fetcher.get_text(FEES_URL))
+            except ValueError as e:  # 精简版页面缺 feeDataInfo；重抓换个服务端变体
+                last = e
+                log.warning(
+                    "[OKX] 费率页无 feeDataInfo（精简版，第 %d/%d 次），重试",
+                    attempt + 1, _FEES_RETRIES,
+                )
+        raise last

@@ -16,6 +16,8 @@ def _render_exchange(lines: list[str], ex: ExchangeResult, window_days: int) -> 
         return
     tag = "（基线建立，无 diff）" if ex.is_baseline else ""
     lines.append(f"\n# {ex.name}{tag}")
+    for w in ex.warnings:
+        lines.append(f"\n⚠️ {w}")
 
     lines.append("\n## 一、交易规则")
     if ex.is_baseline:
@@ -72,7 +74,10 @@ def summary_lines(result: RunResult) -> list[str]:
     for ex in result.exchanges:
         if ex.error:
             out.append(f"[{ex.name}] 抓取失败：{ex.error}")
-        elif ex.is_baseline:
+            continue
+        for w in ex.warnings:
+            out.append(f"[{ex.name}] ⚠️ {w}")
+        if ex.is_baseline:
             out.append(
                 f"[{ex.name}] 基线: 文档 {len(ex.doc_inventory)} 篇 / "
                 f"上币 {len(ex.anns_new)} 下币 {len(ex.anns_del)}"

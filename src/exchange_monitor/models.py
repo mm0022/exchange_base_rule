@@ -39,7 +39,8 @@ class ExchangeResult:
     fee_supported: bool = False
     anns_new: list[Announcement] = field(default_factory=list)
     anns_del: list[Announcement] = field(default_factory=list)
-    error: str = ""
+    warnings: list[str] = field(default_factory=list)  # 单块失败（非致命，报告/Slack 可见）
+    error: str = ""  # 三块全失败（致命，供全交易所失败退出码判断）
 
 
 @dataclass
